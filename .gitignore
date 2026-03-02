@@ -1,0 +1,24 @@
+# 環境変数（認証情報を含む — コミット禁止）
+.env
+
+# SQLiteデータベース + WALファイル
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# ビルド成果物（リポジトリルートのバイナリのみ対象）
+/ai-news
+/server
+
+# macOS
+.DS_Store
+
+# エディタ
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# テストキャッシュ
+vendor/

@@ -1,0 +1,58 @@
+services:
+  ai-news:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-news
+    ports:
+      - "8181:8181"   # ポート8080はScrutiny Hubが使用中 → 8181を使用
+    environment:
+      - PORT=8181
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - VOICEVOX_URL=http://voicevox:50021
+      - NAVIDROME_URL=${NAVIDROME_URL:-http://192.168.0.23:4533}
+      - NAVIDROME_USER=${NAVIDROME_USER}
+      - NAVIDROME_PASS=${NAVIDROME_PASS}
+      - APP_BASE_URL=${APP_BASE_URL:-http://192.168.0.13:8181}   # broadcasts.file_url のベースURL
+      - SMB_HOST=${SMB_HOST:-192.168.0.22}
+      - SMB_USER=${SMB_USER}
+      - SMB_PASS=${SMB_PASS}
+      - SMB_SHARE=${SMB_SHARE:-Music}
+      - SMB_MUSIC_PATH=${SMB_MUSIC_PATH:-ai-news}
+      - DB_PATH=${DB_PATH:-/data/news.db}
+      - PLAYWRIGHT_CDP_ENDPOINT=ws://playwright-chrome:3000
+      - MAX_GEMINI_CONCURRENCY=${MAX_GEMINI_CONCURRENCY:-2}
+      - TZ=${TZ:-Asia/Tokyo}
+    volumes:
+      - /opt/stacks/ai-news/data:/data   # SQLite DB + thumbnails (HOST SSD bind mount)
+    restart: unless-stopped
+    depends_on:
+      voicevox:
+        condition: service_healthy
+      playwright-chrome:
+        condition: service_started
+
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-ubuntu20.04-0.21.0
+    container_name: voicevox
+    ports:
+      - "50021:50021"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:50021/version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12      # 最大2分待機（モデルロード ~30秒）
+      start_period: 30s
+
+  playwright-chrome:
+    image: ghcr.io/browserless/chromium:latest
+    container_name: playwright-chrome
+    environment:
+      - TIMEOUT=30000          # ページ取得タイムアウト (ms)
+      - MAX_CONCURRENT_SESSIONS=2
+    restart: unless-stopped
+    # ポート非公開: ai-news コンテナから ws://playwright-chrome:3000 でのみアクセス
+
+# 名前付きボリュームなし
+# Samba (MP3) は go-smb2 SMBクライアントがネットワーク越しに直接操作
