@@ -172,28 +172,28 @@ Standard Go Project Layout準拠。関心事を `domain / repository / usecase /
 **ストレージアーキテクチャ図（3系統）:**
 
 ```mermaid
-flowchart LR
-    subgraph CONTAINER["ai-news コンテナ (LXC 103, 192.168.0.13)"]
-        APP["Goアプリ<br/>ai-news"]
+flowchart TB
+    subgraph SV1["LXC 103  192.168.0.13"]
+        APP["Goアプリ  ai-news"]
     end
 
-    subgraph LOCAL["① HOST SSD bind mount<br/>/opt/stacks/ai-news/data → /data"]
-        DB[("news.db<br/>SQLite")]
-        THUMB["thumbnails/<br/>{articleID}.jpg"]
+    subgraph SV2["① HOST SSD  bind mount → /data"]
+        DB[("news.db  SQLite")]
+        THUMB["thumbnails/*.jpg"]
     end
 
-    subgraph SAMBA["② Samba LXC 202 (192.168.0.22)<br/>//Music/ai-news/"]
-        MP3["tech/*.mp3<br/>business/*.mp3<br/>digest/*.mp3"]
+    subgraph SV3["② Samba LXC 202  192.168.0.22:445"]
+        MP3["//Music/ai-news/<br/>tech / business / digest  *.mp3"]
     end
 
-    subgraph NAVIDROME["③ Navidrome LXC 203 (192.168.0.23)<br/>/media/music/ai-news/ (svhome02 bind mount)"]
-        NLIB["音楽ライブラリ<br/>(Feishin/Symfoniumで再生)"]
+    subgraph SV4["③ Navidrome LXC 203  192.168.0.23:4533"]
+        NLIB["音楽ライブラリ  Feishin / Symfonium"]
     end
 
-    APP -->|"database/sql 直接 R/W"| DB
-    APP -->|"os package 直接 R/W"| THUMB
-    APP <-->|"go-smb2 SMB2 :445<br/>ネットワーク越し R/W"| MP3
-    MP3 -->|"同一物理パス<br/>svhome02 bind mount"| NLIB
+    APP -->|database/sql| DB
+    APP -->|os package| THUMB
+    APP <-->|go-smb2  SMB2| MP3
+    MP3 -->|bind mount  同一物理パス| NLIB
 ```
 
 > **ポイント:** ① (SQLite・サムネイル) はコンテナ内ローカル読み書き。② (MP3) はネットワーク越しに go-smb2 で直接操作。③ (Navidrome) は ② と同じ物理パスを bind mount 経由で参照するため、ai-news が MP3 を保存後 startScan すれば即座に認識される。
@@ -902,6 +902,7 @@ gantt
         generate-2000 :g20, 20:00, 30m
 
     section Cleanup クリーンアップ
+        %% schedules テーブルと無関係・常時固定登録（UI からの削除・変更不可）
         cleanup-0300 :crit, c03, 03:00, 5m
 ```
 
@@ -1043,9 +1044,14 @@ sequenceDiagram
     end
 
     Note over GUC,GEM: Stage 2 Gemini選定 semaphore=2 カテゴリ並行
-    GUC->>GEM: SelectAndSummarize(articles, catSettings)
-    GEM-->>GUC: ranks + summaries JSON
-    GUC->>DB: articles UPDATE is_selected rank summary
+    par カテゴリ A (semaphore 取得)
+        GUC->>GEM: SelectAndSummarize(articles, catA)
+        GEM-->>GUC: ranks + summaries
+    and カテゴリ B (semaphore 取得)
+        GUC->>GEM: SelectAndSummarize(articles, catB)
+        GEM-->>GUC: ranks + summaries
+    end
+    GUC->>DB: articles UPDATE is_selected rank summary (全カテゴリ)
 
     loop カテゴリごと sort_order順
         Note over GUC,SMB: Stage 3-5 TTS to ffmpeg to SMB

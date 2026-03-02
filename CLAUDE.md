@@ -122,7 +122,6 @@ ai-news/
 │   │   ├── voicevox/               # VOICEVOX REST
 │   │   ├── audio/                  # ffmpeg変換
 │   │   ├── storage/                # go-smb2 SMBクライアント
-│   │   ├── homeassistant/          # HA REST API
 │   │   └── navidrome/              # Subsonic API
 │   ├── handler/
 │   │   ├── middleware.go
@@ -161,26 +160,38 @@ GenerateUsecase
 
 ```
 HA / ATOM ECHO / Lovelace
-  → POST /api/play/{category}
-  → broadcastRepo.GetLatest
-  → HA REST API media_player.play_media
+  → media_player.play_media (HAOS script)
       media_content_id: http://192.168.0.13:8181/media/{category}/latest
   → GET /media/{category}/latest
   → go-smb2でSMBからMP3読み出し → io.Copy → HTTP音声ストリーム
   → HA → svhome02オーディオ端子
+
+# オプション: ブロードキャストのメタデータ取得
+HA → POST /api/play/{category}
+  → broadcastRepo.GetLatest
+  → 200 JSON {"status":"ok","title":"...","media_url":"...","duration_sec":300}
 ```
 
 ### HA設定例
 
 ```yaml
-# configuration.yaml
-rest_command:
+# HA script 設定例（新設計）
+# ai-news の /media/{category}/latest を直接 media_content_id に指定して再生
+script:
   play_tech_news:
-    url: "http://192.168.0.13:8181/api/play/tech"
-    method: POST
+    sequence:
+      - action: media_player.play_media
+        target:
+          entity_id: media_player.svhome02_audio
+        data:
+          media_content_id: "http://192.168.0.13:8181/media/tech/latest"
+          media_content_type: music
+
   stop_news_playback:
-    url: "http://192.168.0.13:8181/api/play/stop"
-    method: POST
+    sequence:
+      - action: media_player.media_stop
+        target:
+          entity_id: media_player.svhome02_audio
 ```
 
 ### Cloudflare Tunnel設定（LXC 101）
@@ -213,9 +224,6 @@ func mediaURL(r *http.Request, path string) string {
 GEMINI_API_KEY=...
 VOICEVOX_URL=http://voicevox:50021
 PLAYWRIGHT_CDP_ENDPOINT=ws://playwright-chrome:3000
-HA_URL=http://192.168.0.21:8123
-HA_TOKEN=...
-HA_MEDIA_PLAYER=media_player.svhome02_audio
 APP_BASE_URL=http://192.168.0.13:8181
 NAVIDROME_URL=http://192.168.0.23:4533
 NAVIDROME_USER=...
