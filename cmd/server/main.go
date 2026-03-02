@@ -4,6 +4,11 @@ package main
 // 依存ライブラリのインポートパスを宣言して go mod tidy / go build を通す
 
 import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+
 	_ "github.com/PuerkitoBio/goquery"
 	_ "github.com/bogem/id3v2/v2"
 	_ "github.com/disintegration/imaging"
@@ -16,4 +21,14 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func main() {}
+func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8181"
+	}
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "ok")
+	})
+	log.Printf("Phase 1 stub listening on :%s (Phase 2 で本実装予定)", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
