@@ -169,6 +169,35 @@ Standard Go Project Layout準拠。関心事を `domain / repository / usecase /
 ※ SMB接続設定（SMB_HOST/SMB_USER/SMB_PASS/SMB_SHARE/SMB_MUSIC_PATH）は Goアプリの環境変数のみで管理
 ```
 
+**ストレージアーキテクチャ図（3系統）:**
+
+```mermaid
+flowchart LR
+    subgraph CONTAINER["ai-news コンテナ (LXC 103, 192.168.0.13)"]
+        APP["Goアプリ<br/>ai-news"]
+    end
+
+    subgraph LOCAL["① HOST SSD bind mount<br/>/opt/stacks/ai-news/data → /data"]
+        DB[("news.db<br/>SQLite")]
+        THUMB["thumbnails/<br/>{articleID}.jpg"]
+    end
+
+    subgraph SAMBA["② Samba LXC 202 (192.168.0.22)<br/>//Music/ai-news/"]
+        MP3["tech/*.mp3<br/>business/*.mp3<br/>digest/*.mp3"]
+    end
+
+    subgraph NAVIDROME["③ Navidrome LXC 203 (192.168.0.23)<br/>/media/music/ai-news/ (svhome02 bind mount)"]
+        NLIB["音楽ライブラリ<br/>(Feishin/Symfoniumで再生)"]
+    end
+
+    APP -->|"database/sql 直接 R/W"| DB
+    APP -->|"os package 直接 R/W"| THUMB
+    APP <-->|"go-smb2 SMB2 :445<br/>ネットワーク越し R/W"| MP3
+    MP3 -->|"同一物理パス<br/>svhome02 bind mount"| NLIB
+```
+
+> **ポイント:** ① (SQLite・サムネイル) はコンテナ内ローカル読み書き。② (MP3) はネットワーク越しに go-smb2 で直接操作。③ (Navidrome) は ② と同じ物理パスを bind mount 経由で参照するため、ai-news が MP3 を保存後 startScan すれば即座に認識される。
+
 **事前準備:**
 
 HOST/LXC 103 側のシステム変更は不要。cifs-utils・fstab・pct set mp1 は使用しない。
@@ -545,7 +574,7 @@ INSERT OR IGNORE INTO schedules (type, hour) VALUES
 INSERT OR IGNORE INTO schedules (type, hour) VALUES
     ('generate',  6), ('generate',  7), ('generate',  8),
     ('generate', 11), ('generate', 12), ('generate', 13),
-    ('generate', 18), ('generate', 19), ('generate', 20), ('generate', 23);
+    ('generate', 18), ('generate', 19), ('generate', 20);
 
 -- ── category_settings: カテゴリごとの設定（拡張可能）────────────────
 -- 新カテゴリ追加はここにINSERT + sourcesにURLを登録するだけでパイプラインに自動組み込み
@@ -815,7 +844,7 @@ ScrapeJob:   schedules(type='scrape') の各時刻 → ScrapeUsecase.Run(ctx, "c
              ※ ScrapeJob全体の排他制御はScrapeUsecase内のatomic.Boolが担う（複数エントリ間も排他）
 
 GenerateJob: schedules(type='generate') の各時刻 → GenerateUsecase.Run(ctx, "cron") [30分タイムアウト]
-             例: 06:00, 07:00, 08:00, 11:00, 12:00, 13:00, 18:00, 19:00, 20:00, 23:00 の10エントリが独立登録
+             例: 06:00, 07:00, 08:00, 11:00, 12:00, 13:00, 18:00, 19:00, 20:00 の9エントリが独立登録
              SkipIfStillRunning: 同一cronエントリの前回実行がまだ完了していない場合に今回をスキップ
              ※ GenerateJob全体の排他制御はGenerateUsecase内のatomic.Boolが担う（複数エントリ間も排他）
              ※ ScrapeJobとGenerateJobはそれぞれ独立したatomic.Boolで管理（互いにブロックしない）
@@ -871,7 +900,6 @@ gantt
         generate-1800 :g18, 18:00, 30m
         generate-1900 :g19, 19:00, 30m
         generate-2000 :g20, 20:00, 30m
-        generate-2300 :g23, 23:00, 30m
 
     section Cleanup クリーンアップ
         cleanup-0300 :crit, c03, 03:00, 5m
@@ -1105,6 +1133,28 @@ flowchart TD
         M3 --> M4["HTTP 200 ストリーム配信"]
     end
 ```
+
+**再生経路4: Navidrome 経由（Feishin / Symfonium クライアント）**
+
+```mermaid
+sequenceDiagram
+    actor User as ユーザー
+    participant Client as Feishin / Symfonium
+    participant Navi as Navidrome :4533 (LXC 203)
+    participant FS as /media/music/ (svhome02 bind mount)
+
+    User->>Client: ai-news アルバム選択 → 再生
+
+    Client->>+Navi: Subsonic API GET /rest/stream?id=...
+    Note over Navi,FS: Navidrome は svhome02 の物理パスを<br/>bind mount 経由でローカル参照
+    Navi->>FS: ファイル読み出し ai-news/{category}/*.mp3
+    FS-->>Navi: MP3 バイト列
+    Navi-->>-Client: HTTP 200 audio/mpeg ストリーム
+
+    Client-->>User: 音声出力（デバイスのスピーカー）
+```
+
+> **ai-news との関係:** ai-news が Samba に MP3 を書き込み → `navidrome.StartScan()` を呼ぶ → Navidrome がライブラリを更新 → Feishin/Symfonium で新エピソードが即座に再生可能になる。ai-news の HTTP 配信 (`/media/...`) は経路1-3専用。経路4は Navidrome が Samba の物理パスを直接参照するため ai-news のサーバーを経由しない。
 
 ### 4-4. グレースフルシャットダウン
 
