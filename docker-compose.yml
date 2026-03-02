@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      privileged: true   # LXC内Docker環境でビルドコンテナのAppArmor制限を回避
     container_name: ai-news
     ports:
       - "8181:8181"   # ポート8080はScrutiny Hubが使用中 → 8181を使用
