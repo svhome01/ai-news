@@ -1,34 +1,82 @@
 package main
 
-// Phase 1 scaffold stub — Phase 2 で DI配線・HTTPサーバー起動を実装する
-// 依存ライブラリのインポートパスを宣言して go mod tidy / go build を通す
-
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	_ "github.com/PuerkitoBio/goquery"
-	_ "github.com/bogem/id3v2/v2"
-	_ "github.com/disintegration/imaging"
-	_ "github.com/hirochachacha/go-smb2"
-	_ "github.com/joho/godotenv"
-	_ "github.com/mmcdole/gofeed"
-	_ "github.com/playwright-community/playwright-go"
-	_ "github.com/robfig/cron/v3"
-	_ "google.golang.org/genai"
-	_ "modernc.org/sqlite"
+	"ai-news/internal/config"
+	"ai-news/internal/repository"
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8181"
+	cfg := config.Load()
+
+	// ── Database ────────────────────────────────────────────────────────────
+	db, err := repository.OpenDB(cfg.DBPath)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
 	}
-	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "ok")
-	})
-	log.Printf("Phase 1 stub listening on :%s (Phase 2 で本実装予定)", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	defer db.Close()
+
+	// ── Repositories ────────────────────────────────────────────────────────
+	// Assigned to blank identifiers until usecases and handlers are wired in Steps 2–4.
+	_ = repository.NewArticleRepo(db)
+	_ = repository.NewSourceRepo(db)
+	_ = repository.NewBroadcastRepo(db)
+	_ = repository.NewPipelineRepo(db)
+	_ = repository.NewSettingsRepo(db)
+	_ = repository.NewCategoryRepo(db)
+	_ = repository.NewScheduleRepo(db)
+
+	// ── HTTP router ─────────────────────────────────────────────────────────
+	mux := http.NewServeMux()
+	registerRoutes(mux)
+
+	// ── Server ──────────────────────────────────────────────────────────────
+	srv := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      mux,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	// Graceful shutdown: drain in-flight requests on SIGINT/SIGTERM.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("ai-news listening on :%s", cfg.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %v", err)
+		}
+	}()
+
+	<-quit
+	log.Println("shutting down...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("shutdown: %v", err)
+	}
+	log.Println("stopped")
+}
+
+// registerRoutes wires all HTTP handlers to the mux.
+// Handler and usecase packages are added here in Steps 2–4.
+func registerRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /healthz", handleHealthz)
+	mux.HandleFunc("GET /api/health", handleHealthz)
+}
+
+func handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	fmt.Fprintln(w, "ok")
 }
