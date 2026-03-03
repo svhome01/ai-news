@@ -14,7 +14,7 @@ import (
 const (
 	maxRetries     = 3
 	retryBackoff   = 2 * time.Second
-	requestTimeout = 2 * time.Minute
+	requestTimeout = 5 * time.Minute
 )
 
 // Speaker represents a VOICEVOX speaker (style).
