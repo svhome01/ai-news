@@ -4,12 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI News Station</title>
-    <!-- Pico.css CDN -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
-    <!-- HTMX CDN -->
     <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <style>
+        .badge { display: inline-block; padding: 0.2em 0.6em; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+        .badge-running   { background: #f0ad4e; color: #000; }
+        .badge-completed { background: #5cb85c; color: #fff; }
+        .badge-failed    { background: #d9534f; color: #fff; }
+        .badge-cancelled { background: #777; color: #fff; }
+        .article-thumb { width: 80px; height: 45px; object-fit: cover; border-radius: 4px; vertical-align: middle; }
+        article.news-card { padding: 0.8rem 1rem; margin-bottom: 0.6rem; }
+        .card-meta { color: var(--pico-muted-color); font-size: 0.85em; }
+    </style>
 </head>
 <body>
+    <nav class="container">
+        <ul><li><strong>📻 AI News Station</strong></li></ul>
+        <ul>
+            <li><a href="/">ダッシュボード</a></li>
+            <li><a href="/ui/sources">ソース</a></li>
+            <li><a href="/ui/settings">設定</a></li>
+            <li><a href="/ui/system">システム</a></li>
+        </ul>
+    </nav>
     <main class="container">
         {{template "content" .}}
     </main>

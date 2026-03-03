@@ -1,4 +1,36 @@
 {{define "content"}}
 <h1>システム</h1>
-<p>Phase 2 implementation pending.</p>
+
+<section>
+  <h2>手動実行</h2>
+  <div class="grid">
+    <button hx-post="/ui/system/trigger?job_type=scrape"
+            hx-target="#pipeline-log"
+            hx-swap="afterbegin">
+      スクレイプ実行
+    </button>
+    <button hx-post="/ui/system/trigger?job_type=generate"
+            hx-target="#pipeline-log"
+            hx-swap="afterbegin">
+      音声生成実行
+    </button>
+    <button class="secondary"
+            hx-post="/ui/system/cleanup"
+            hx-target="#cleanup-result"
+            hx-swap="innerHTML">
+      クリーンアップ
+    </button>
+  </div>
+  <div id="cleanup-result"></div>
+</section>
+
+<section>
+  <h2>実行ログ</h2>
+  <div id="pipeline-log">
+    {{range .Runs}}
+    {{template "pipeline-status" .}}
+    {{end}}
+    {{if not .Runs}}<p>実行ログがありません。</p>{{end}}
+  </div>
+</section>
 {{end}}

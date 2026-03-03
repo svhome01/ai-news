@@ -1,4 +1,105 @@
 {{define "content"}}
 <h1>設定</h1>
-<p>Phase 2 implementation pending.</p>
+
+{{if .FlashMsg}}<p style="color:green">✅ {{.FlashMsg}}</p>{{end}}
+{{if .ErrMsg}}<p style="color:red">❌ {{.ErrMsg}}</p>{{end}}
+
+<div class="grid">
+  <!-- App settings -->
+  <section>
+    <h2>アプリ設定</h2>
+    <form method="post" action="/ui/settings">
+      <label>VOICEVOX スピード (0.5–2.0)
+        <input type="number" name="voicevox_speed_scale"
+               value="{{.Settings.VoicevoxSpeedScale}}" min="0.5" max="2.0" step="0.1">
+      </label>
+      <label>Gemini モデル
+        <input type="text" name="gemini_model" value="{{.Settings.GeminiModel}}">
+      </label>
+      <label>保持期間 (日)
+        <input type="number" name="retention_days"
+               value="{{.Settings.RetentionDays}}" min="1" max="365">
+      </label>
+      <button type="submit">保存</button>
+    </form>
+  </section>
+
+  <!-- Category management -->
+  <section>
+    <h2>カテゴリ設定</h2>
+    <table>
+      <thead>
+        <tr><th>カテゴリ</th><th>表示名</th><th>TTS</th><th>有効</th><th>操作</th></tr>
+      </thead>
+      <tbody id="category-tbody">
+        {{range .Categories}}
+        {{template "category-row" .}}
+        {{end}}
+      </tbody>
+    </table>
+
+    <details>
+      <summary>新規カテゴリを追加</summary>
+      <form hx-post="/ui/settings/categories"
+            hx-target="#category-tbody"
+            hx-swap="beforeend"
+            hx-on::after-request="this.reset()">
+        <div class="grid">
+          <label>カテゴリ名 (英小文字・数字)
+            <input type="text" name="category" required pattern="[a-z][a-z0-9_]*" placeholder="tech">
+          </label>
+          <label>表示名
+            <input type="text" name="display_name" required placeholder="テクノロジー">
+          </label>
+        </div>
+        <div class="grid">
+          <label>TTS エンジン
+            <select name="tts_engine">
+              <option value="voicevox">VOICEVOX</option>
+              <option value="edge-tts">edge-tts</option>
+            </select>
+          </label>
+          <label>VOICEVOX スピーカーID
+            <input type="number" name="voicevox_speaker_id" value="2" min="0">
+          </label>
+        </div>
+        <div class="grid">
+          <label>記事数/回
+            <input type="number" name="articles_per_episode" value="5" min="1" max="20">
+          </label>
+          <label>要約文字数
+            <input type="number" name="summary_chars_per_article" value="200" min="50" max="500">
+          </label>
+        </div>
+        <div class="grid">
+          <label>言語
+            <select name="language">
+              <option value="ja">日本語</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <label>ソート順
+            <input type="number" name="sort_order" value="0">
+          </label>
+        </div>
+        <label><input type="checkbox" name="enabled" checked> 有効</label>
+        <button type="submit">追加</button>
+      </form>
+    </details>
+  </section>
+</div>
 {{end}}
+
+{{define "category-row"}}<tr id="cat-row-{{.Category}}">
+  <td><code>{{.Category}}</code></td>
+  <td>{{.DisplayName}}</td>
+  <td>{{.TTSEngine}}</td>
+  <td>{{if .Enabled}}✅{{else}}❌{{end}}</td>
+  <td>
+    <button class="secondary outline" style="padding:0.3em 0.6em"
+      hx-delete="/ui/settings/categories/{{.Category}}"
+      hx-target="#cat-row-{{.Category}}"
+      hx-swap="outerHTML"
+      hx-confirm="カテゴリ {{.Category}} を削除しますか？">削除</button>
+  </td>
+</tr>{{end}}

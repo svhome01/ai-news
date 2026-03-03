@@ -1,2 +1,23 @@
-{{/* HTMX swap target: 記事カードリスト — Phase 2 で実装 */}}
-<p>Phase 2 implementation pending.</p>
+{{define "article-list"}}
+{{range .Articles}}
+<article class="news-card">
+  <div class="grid" style="grid-template-columns:90px 1fr;gap:1rem;align-items:start">
+    {{if .ThumbnailURL}}
+    <img class="article-thumb" src="{{.ThumbnailURL}}" alt="">
+    {{else}}
+    <div style="width:80px;height:45px;background:var(--pico-muted-border-color);border-radius:4px"></div>
+    {{end}}
+    <div>
+      <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+      <p class="card-meta">
+        {{.Category}} &middot; {{.CreatedAt}}
+        {{if .IsSelected}}<span class="badge badge-completed">選定済</span>{{end}}
+        {{if .Summary}}<br><em>{{with .Summary}}{{.}}{{end}}</em>{{end}}
+      </p>
+    </div>
+  </div>
+</article>
+{{else}}
+<p>記事がありません。スクレイプを実行してください。</p>
+{{end}}
+{{end}}

@@ -1,1 +1,23 @@
-{{/* パイプライン実行状況バッジ（HTMXポーリング用）— Phase 2 で実装 */}}
+{{define "pipeline-status"}}<article id="pipeline-run-{{.ID}}"
+  {{if eq (print .Status) "running"}}
+  hx-get="/ui/system/pipeline/{{.ID}}/status"
+  hx-trigger="every 2s"
+  hx-target="#pipeline-run-{{.ID}}"
+  hx-swap="outerHTML"
+  {{end}}>
+  <div class="grid">
+    <div>
+      <strong>{{.JobType}}</strong>
+      <span class="badge badge-{{print .Status}}">{{.Status}}</span>
+      <span class="card-meta">&nbsp;{{.TriggeredBy}} &middot; {{.StartedAt}}</span>
+    </div>
+    <div style="text-align:right">
+      {{if .CurrentStep}}<small>{{with .CurrentStep}}{{.}}{{end}}</small>{{end}}
+      {{if .ArticlesCollected}}<small> &nbsp;収集: {{with .ArticlesCollected}}{{.}}{{end}} 件</small>{{end}}
+      {{if .ArticlesSelected}}<small> &nbsp;選定: {{with .ArticlesSelected}}{{.}}{{end}} 件</small>{{end}}
+      {{if .FinishedAt}}<small> &nbsp;完了: {{with .FinishedAt}}{{.}}{{end}}</small>{{end}}
+    </div>
+  </div>
+  {{if .ErrorMessage}}<details><summary>エラー</summary><pre style="font-size:0.8em">{{with .ErrorMessage}}{{.}}{{end}}</pre></details>{{end}}
+</article>
+{{end}}

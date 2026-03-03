@@ -1,4 +1,43 @@
 {{define "content"}}
 <h1>AI News Station</h1>
-<p>Phase 2 implementation pending.</p>
+
+{{if .Categories}}
+<!-- Category tabs -->
+<nav aria-label="カテゴリ">
+  <ul>
+    {{range .Categories}}
+    <li>
+      <a href="/?category={{.Category}}"
+         {{if eq $.Category .Category}}aria-current="page"{{end}}>
+        {{.DisplayName}}
+      </a>
+    </li>
+    {{end}}
+  </ul>
+</nav>
+
+{{if .Broadcast}}
+<article>
+  <header>🎙 最新放送: <strong>{{.Broadcast.Title}}</strong></header>
+  <p>
+    {{.Broadcast.CreatedAt}}
+    {{if .Broadcast.DurationSec}} &middot; {{.Broadcast.DurationSec}} 秒{{end}}
+  </p>
+</article>
+{{end}}
+
+<section>
+  <h2>記事一覧</h2>
+  <div id="article-list"
+       hx-get="/ui/articles?category={{.Category}}"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <p aria-busy="true">読み込み中...</p>
+  </div>
+</section>
+{{else}}
+<article>
+  <p>カテゴリが設定されていません。<a href="/ui/settings">設定ページ</a>からカテゴリを追加してください。</p>
+</article>
+{{end}}
 {{end}}

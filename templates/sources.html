@@ -1,4 +1,53 @@
 {{define "content"}}
 <h1>ソース管理</h1>
-<p>Phase 2 implementation pending.</p>
+
+<details>
+  <summary>新規ソースを追加</summary>
+  <form hx-post="/ui/sources"
+        hx-target="#source-tbody"
+        hx-swap="beforeend"
+        hx-on::after-request="this.reset()">
+    <div class="grid">
+      <label>名前
+        <input type="text" name="name" required placeholder="Tech Crunch Japan">
+      </label>
+      <label>カテゴリ
+        <select name="category" required>
+          {{range .Categories}}<option value="{{.Category}}">{{.DisplayName}}</option>{{end}}
+        </select>
+      </label>
+    </div>
+    <label>URL
+      <input type="url" name="url" required placeholder="https://...">
+    </label>
+    <div class="grid">
+      <label>取得方法
+        <select name="fetch_method">
+          <option value="rss">RSS</option>
+          <option value="http">HTTP</option>
+          <option value="playwright">Playwright</option>
+        </select>
+      </label>
+      <label>CSSセレクタ
+        <input type="text" name="css_selector" placeholder="article a (オプション)">
+      </label>
+    </div>
+    <label><input type="checkbox" name="enabled" checked> 有効</label>
+    <button type="submit">追加</button>
+  </form>
+</details>
+
+<figure>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>名前</th><th>カテゴリ</th><th>URL</th>
+        <th>方式</th><th>状態</th><th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="source-tbody">
+      {{range .Sources}}{{template "source-row" .}}{{end}}
+    </tbody>
+  </table>
+</figure>
 {{end}}

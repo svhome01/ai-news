@@ -1,1 +1,63 @@
-{{/* インライン編集可能ソース行 — Phase 2 で実装 */}}
+{{define "source-row"}}<tr id="source-row-{{.ID}}">
+  <td>{{.ID}}</td>
+  <td>{{.Name}}</td>
+  <td>{{.Category}}</td>
+  <td style="font-size:0.8em;word-break:break-all"><a href="{{.URL}}" target="_blank" rel="noopener">{{.URL}}</a></td>
+  <td>{{.FetchMethod}}</td>
+  <td>{{if .Enabled}}✅{{else}}❌{{end}}</td>
+  <td>
+    <button class="outline" style="padding:0.3em 0.6em"
+      hx-get="/ui/sources/{{.ID}}/edit"
+      hx-target="#source-row-{{.ID}}"
+      hx-swap="outerHTML">編集</button>
+    <button class="secondary outline" style="padding:0.3em 0.6em"
+      hx-delete="/ui/sources/{{.ID}}"
+      hx-target="#source-row-{{.ID}}"
+      hx-swap="outerHTML"
+      hx-confirm="ソース「{{.Name}}」を削除しますか？">削除</button>
+  </td>
+</tr>{{end}}
+
+{{define "source-edit-row"}}
+<tr id="source-row-{{.Source.ID}}">
+  <td colspan="7">
+    <form hx-put="/ui/sources/{{.Source.ID}}"
+          hx-target="#source-row-{{.Source.ID}}"
+          hx-swap="outerHTML">
+      <div class="grid">
+        <label>名前
+          <input type="text" name="name" value="{{.Source.Name}}" required>
+        </label>
+        <label>カテゴリ
+          <select name="category">
+            {{range .Categories}}
+            <option value="{{.Category}}" {{if eq $.Source.Category .Category}}selected{{end}}>{{.DisplayName}}</option>
+            {{end}}
+          </select>
+        </label>
+      </div>
+      <label>URL<input type="url" name="url" value="{{.Source.URL}}" required></label>
+      <div class="grid">
+        <label>方式
+          <select name="fetch_method">
+            <option value="rss" {{if eq (print $.Source.FetchMethod) "rss"}}selected{{end}}>RSS</option>
+            <option value="http" {{if eq (print $.Source.FetchMethod) "http"}}selected{{end}}>HTTP</option>
+            <option value="playwright" {{if eq (print $.Source.FetchMethod) "playwright"}}selected{{end}}>Playwright</option>
+          </select>
+        </label>
+        <label>CSSセレクタ
+          <input type="text" name="css_selector" value="{{with .Source.CSSSelector}}{{.}}{{end}}">
+        </label>
+      </div>
+      <label><input type="checkbox" name="enabled" {{if .Source.Enabled}}checked{{end}}> 有効</label>
+      <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+        <button type="submit">保存</button>
+        <button type="button" class="secondary outline"
+          hx-get="/ui/sources/{{.Source.ID}}"
+          hx-target="#source-row-{{.Source.ID}}"
+          hx-swap="outerHTML">キャンセル</button>
+      </div>
+    </form>
+  </td>
+</tr>
+{{end}}
