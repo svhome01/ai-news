@@ -46,6 +46,7 @@
 ssh svhome01-docker   # docker-lxc (LXC 103) 直接操作 — ai-news作業はここ
 ssh svhome01          # svhome01 Proxmoxホスト操作
 ssh svhome02          # svhome02 Proxmoxホスト操作
+ssh svhome02-haos-vm  # svhome02 haos-vm 操作 - Home Assistant作業はここ
 # pct経由: ssh svhome01 → pct enter 103
 ```
 
