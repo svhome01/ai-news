@@ -115,6 +115,23 @@ func (r *ArticleRepo) SetBroadcastID(ctx context.Context, id, broadcastID int64)
 	return err
 }
 
+// ListSelected returns articles for a category that are selected (is_selected=1)
+// and not yet assigned to a broadcast (broadcast_id IS NULL), ordered by rank.
+func (r *ArticleRepo) ListSelected(ctx context.Context, category string) ([]*domain.Article, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, source_id, pipeline_run_id, broadcast_id,
+		       title, url, thumbnail_url, raw_content, category,
+		       is_selected, select_rank, summary, created_at, processed_at
+		FROM articles
+		WHERE category = ? AND is_selected = 1 AND broadcast_id IS NULL
+		ORDER BY select_rank ASC`, category)
+	if err != nil {
+		return nil, fmt.Errorf("article list selected: %w", err)
+	}
+	defer rows.Close()
+	return scanArticles(rows)
+}
+
 // NullifyRawContent clears raw_content on articles older than the given number of days
 // to keep the database compact. thumbnail_url is intentionally preserved.
 func (r *ArticleRepo) NullifyRawContent(ctx context.Context, olderThanDays int) error {

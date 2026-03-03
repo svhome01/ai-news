@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"ai-news/internal/config"
+	"ai-news/internal/infra/navidrome"
 	"ai-news/internal/infra/scraper"
+	"ai-news/internal/infra/storage"
 	"ai-news/internal/infra/thumbnail"
+	"ai-news/internal/infra/voicevox"
 	"ai-news/internal/repository"
 	"ai-news/internal/scheduler"
 	"ai-news/internal/usecase"
@@ -37,10 +40,6 @@ func main() {
 	categoryRepo  := repository.NewCategoryRepo(db)
 	scheduleRepo  := repository.NewScheduleRepo(db)
 
-	// Keep references alive until Steps 3–4 wire them into usecases/handlers.
-	_ = broadcastRepo
-	_ = settingsRepo
-
 	// ── Infrastructure ──────────────────────────────────────────────────────
 	thumbStore, err := thumbnail.New()
 	if err != nil {
@@ -49,21 +48,45 @@ func main() {
 
 	fetcherFactory := scraper.NewFactory(cfg.PlaywrightCDPEndpoint)
 
-	// ── Usecases ────────────────────────────────────────────────────────────
-	sourceUC  := usecase.NewSourceUsecase(sourceRepo, categoryRepo)
-	articleUC := usecase.NewArticleUsecase(articleRepo)
-	scrapeUC  := usecase.NewScrapeUsecase(pipelineRepo, sourceRepo, articleRepo, thumbStore, fetcherFactory)
+	voicevoxClient := voicevox.New(cfg.VOICEVOXUrl)
 
-	// Keep references alive; handlers are wired in Steps 3–4.
+	musicStore := storage.New(cfg.SMBHost, cfg.SMBUser, cfg.SMBPass, cfg.SMBShare, cfg.SMBMusicPath)
+
+	var naviClient *navidrome.Client
+	if cfg.NavidromeURL != "" && cfg.NavidromeUser != "" {
+		naviClient = navidrome.New(cfg.NavidromeURL, cfg.NavidromeUser, cfg.NavidromePass)
+	}
+
+	// ── Usecases ────────────────────────────────────────────────────────────
+	sourceUC   := usecase.NewSourceUsecase(sourceRepo, categoryRepo)
+	articleUC  := usecase.NewArticleUsecase(articleRepo)
+	scrapeUC   := usecase.NewScrapeUsecase(pipelineRepo, sourceRepo, articleRepo, thumbStore, fetcherFactory)
+	settingsUC := usecase.NewSettingsUsecase(settingsRepo)
+	categoryUC := usecase.NewCategoryUsecase(categoryRepo, voicevoxClient)
+	playbackUC := usecase.NewPlaybackUsecase(categoryRepo, broadcastRepo, cfg.AppBaseURL)
+
+	generateUC := usecase.NewGenerateUsecase(
+		pipelineRepo, settingsRepo, categoryRepo, articleRepo, broadcastRepo,
+		cfg.GeminiAPIKey, cfg.MaxGeminiConcurrency,
+		voicevoxClient, musicStore, naviClient,
+		cfg.AppBaseURL,
+	)
+
+	cleanupUC := usecase.NewCleanupUsecase(settingsRepo, broadcastRepo, articleRepo, musicStore, thumbStore)
+
+	// Keep unused references alive until handlers are wired in Step 4.
 	_ = sourceUC
 	_ = articleUC
+	_ = settingsUC
+	_ = categoryUC
+	_ = playbackUC
 
 	// ── Scheduler ───────────────────────────────────────────────────────────
 	sched := scheduler.New(
 		scheduleRepo,
 		scrapeUC.Run,
-		nil, // GenerateUsecase — wired in Step 3
-		nil, // CleanupUsecase  — wired in Step 3
+		generateUC.Run,
+		cleanupUC.Run,
 	)
 
 	startCtx := context.Background()
@@ -110,7 +133,7 @@ func main() {
 }
 
 // registerRoutes wires all HTTP handlers to the mux.
-// Handler and usecase packages are added in Steps 3–4.
+// Handler and usecase packages are added in Step 4.
 func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /api/health", handleHealthz)
