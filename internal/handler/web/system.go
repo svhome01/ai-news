@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"html/template"
 	"net/http"
 
@@ -62,11 +63,12 @@ func (h *SystemHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go func() {
+		ctx := context.Background() // detached: request context cancelled on response send
 		switch jobType {
 		case "scrape":
-			_ = h.scrapeUC.Run(r.Context(), "ui")
+			_ = h.scrapeUC.Run(ctx, "ui")
 		case "generate":
-			_ = h.generateUC.Run(r.Context(), "ui")
+			_ = h.generateUC.Run(ctx, "ui")
 		}
 	}()
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"ai-news/internal/domain"
@@ -38,7 +39,7 @@ func (h *PipelineHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go func() {
-		ctx := r.Context()
+		ctx := context.Background() // detached: request context cancelled on response send
 		switch jobType {
 		case "scrape":
 			if err := h.scrapeUC.Run(ctx, "api"); err != nil {
