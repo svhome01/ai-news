@@ -1,24 +1,24 @@
-# 環境変数（認証情報を含む — コミット禁止）
+# Environment variables (contains credentials — do NOT commit)
 .env
 
-# SQLiteデータベース + WALファイル
+# SQLite database and WAL files
 data/
 *.db
 *.db-shm
 *.db-wal
 
-# ビルド成果物（リポジトリルートのバイナリのみ対象）
+# Build artifacts (binaries at repo root only)
 /ai-news
 /server
 
 # macOS
 .DS_Store
 
-# エディタ
+# Editors
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# テストキャッシュ
+# Test cache
 vendor/
