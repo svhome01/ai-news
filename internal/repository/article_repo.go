@@ -99,6 +99,13 @@ func (r *ArticleRepo) MarkSelected(ctx context.Context, id int64, rank int, summ
 	return err
 }
 
+// SetThumbnailURL updates the local thumbnail serving path after the image has been saved.
+func (r *ArticleRepo) SetThumbnailURL(ctx context.Context, id int64, url string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE articles SET thumbnail_url = ? WHERE id = ?`, url, id)
+	return err
+}
+
 // SetBroadcastID links an article to a broadcast and records the processing timestamp.
 func (r *ArticleRepo) SetBroadcastID(ctx context.Context, id, broadcastID int64) error {
 	_, err := r.db.ExecContext(ctx, `

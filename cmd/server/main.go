@@ -11,7 +11,11 @@ import (
 	"time"
 
 	"ai-news/internal/config"
+	"ai-news/internal/infra/scraper"
+	"ai-news/internal/infra/thumbnail"
 	"ai-news/internal/repository"
+	"ai-news/internal/scheduler"
+	"ai-news/internal/usecase"
 )
 
 func main() {
@@ -25,14 +29,47 @@ func main() {
 	defer db.Close()
 
 	// ── Repositories ────────────────────────────────────────────────────────
-	// Assigned to blank identifiers until usecases and handlers are wired in Steps 2–4.
-	_ = repository.NewArticleRepo(db)
-	_ = repository.NewSourceRepo(db)
-	_ = repository.NewBroadcastRepo(db)
-	_ = repository.NewPipelineRepo(db)
-	_ = repository.NewSettingsRepo(db)
-	_ = repository.NewCategoryRepo(db)
-	_ = repository.NewScheduleRepo(db)
+	articleRepo   := repository.NewArticleRepo(db)
+	sourceRepo    := repository.NewSourceRepo(db)
+	broadcastRepo := repository.NewBroadcastRepo(db)
+	pipelineRepo  := repository.NewPipelineRepo(db)
+	settingsRepo  := repository.NewSettingsRepo(db)
+	categoryRepo  := repository.NewCategoryRepo(db)
+	scheduleRepo  := repository.NewScheduleRepo(db)
+
+	// Keep references alive until Steps 3–4 wire them into usecases/handlers.
+	_ = broadcastRepo
+	_ = settingsRepo
+
+	// ── Infrastructure ──────────────────────────────────────────────────────
+	thumbStore, err := thumbnail.New()
+	if err != nil {
+		log.Fatalf("thumbnail store: %v", err)
+	}
+
+	fetcherFactory := scraper.NewFactory(cfg.PlaywrightCDPEndpoint)
+
+	// ── Usecases ────────────────────────────────────────────────────────────
+	sourceUC  := usecase.NewSourceUsecase(sourceRepo, categoryRepo)
+	articleUC := usecase.NewArticleUsecase(articleRepo)
+	scrapeUC  := usecase.NewScrapeUsecase(pipelineRepo, sourceRepo, articleRepo, thumbStore, fetcherFactory)
+
+	// Keep references alive; handlers are wired in Steps 3–4.
+	_ = sourceUC
+	_ = articleUC
+
+	// ── Scheduler ───────────────────────────────────────────────────────────
+	sched := scheduler.New(
+		scheduleRepo,
+		scrapeUC.Run,
+		nil, // GenerateUsecase — wired in Step 3
+		nil, // CleanupUsecase  — wired in Step 3
+	)
+
+	startCtx := context.Background()
+	if err := sched.Start(startCtx); err != nil {
+		log.Fatalf("scheduler start: %v", err)
+	}
 
 	// ── HTTP router ─────────────────────────────────────────────────────────
 	mux := http.NewServeMux()
@@ -47,7 +84,6 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// Graceful shutdown: drain in-flight requests on SIGINT/SIGTERM.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -61,16 +97,20 @@ func main() {
 	<-quit
 	log.Println("shutting down...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// Stop the scheduler and wait for any running jobs to finish.
+	schedDone := sched.Stop()
+	<-schedDone.Done()
+
+	httpCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("shutdown: %v", err)
+	if err := srv.Shutdown(httpCtx); err != nil {
+		log.Fatalf("http shutdown: %v", err)
 	}
 	log.Println("stopped")
 }
 
 // registerRoutes wires all HTTP handlers to the mux.
-// Handler and usecase packages are added here in Steps 2–4.
+// Handler and usecase packages are added in Steps 3–4.
 func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /api/health", handleHealthz)
