@@ -9,6 +9,8 @@ services:
     environment:
       - PORT=8181
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GCLOUD_TTS_KEY=${GCLOUD_TTS_KEY}
+      - GCLOUD_TTS_VOICE=${GCLOUD_TTS_VOICE:-ja-JP-Neural2-B}
       - VOICEVOX_URL=http://voicevox:50021
       - NAVIDROME_URL=${NAVIDROME_URL:-http://192.168.0.23:4533}
       - NAVIDROME_USER=${NAVIDROME_USER}
