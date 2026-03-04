@@ -88,11 +88,17 @@ func (h *SettingsHandler) CreateCategory(w http.ResponseWriter, r *http.Request)
 	artCount, _ := strconv.Atoi(r.FormValue("articles_per_episode"))
 	summChars, _ := strconv.Atoi(r.FormValue("summary_chars_per_article"))
 	sortOrder, _ := strconv.Atoi(r.FormValue("sort_order"))
+	ttsVoice := r.FormValue("tts_voice")
+	var ttsVoicePtr *string
+	if ttsVoice != "" {
+		ttsVoicePtr = &ttsVoice
+	}
 	c := &domain.CategorySettings{
 		Category:               r.FormValue("category"),
 		DisplayName:            r.FormValue("display_name"),
 		TTSEngine:              r.FormValue("tts_engine"),
-		VoicevoxSpeakerID:     speakerID,
+		VoicevoxSpeakerID:      speakerID,
+		TTSVoice:               ttsVoicePtr,
 		Language:               r.FormValue("language"),
 		ArticlesPerEpisode:     artCount,
 		SummaryCharsPerArticle: summChars,
@@ -101,6 +107,68 @@ func (h *SettingsHandler) CreateCategory(w http.ResponseWriter, r *http.Request)
 	}
 	if err := h.categoryUC.Create(r.Context(), c); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := h.catRowTmpl.ExecuteTemplate(w, "category-row", c); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// GetCategoryView handles GET /ui/settings/categories/{name} (HTMX: returns category-row partial).
+func (h *SettingsHandler) GetCategoryView(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	cat, err := h.categoryUC.GetByName(r.Context(), name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if err := h.catRowTmpl.ExecuteTemplate(w, "category-row", cat); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// GetCategoryEdit handles GET /ui/settings/categories/{name}/edit (HTMX: returns edit form partial).
+func (h *SettingsHandler) GetCategoryEdit(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	cat, err := h.categoryUC.GetByName(r.Context(), name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if err := h.catRowTmpl.ExecuteTemplate(w, "category-edit-row", cat); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// UpdateCategory handles PUT /ui/settings/categories/{name} (HTMX: updates and returns category-row partial).
+func (h *SettingsHandler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Fetch current values so that fields not in the edit form are preserved.
+	c, err := h.categoryUC.GetByName(r.Context(), name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	speakerID, _ := strconv.Atoi(r.FormValue("voicevox_speaker_id"))
+	artCount, _ := strconv.Atoi(r.FormValue("articles_per_episode"))
+	summChars, _ := strconv.Atoi(r.FormValue("summary_chars_per_article"))
+	ttsVoice := r.FormValue("tts_voice")
+	var ttsVoicePtr *string
+	if ttsVoice != "" {
+		ttsVoicePtr = &ttsVoice
+	}
+	c.TTSEngine = r.FormValue("tts_engine")
+	c.VoicevoxSpeakerID = speakerID
+	c.TTSVoice = ttsVoicePtr
+	c.ArticlesPerEpisode = artCount
+	c.SummaryCharsPerArticle = summChars
+	c.Enabled = r.FormValue("enabled") != ""
+	if err := h.categoryUC.Update(r.Context(), c); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if err := h.catRowTmpl.ExecuteTemplate(w, "category-row", c); err != nil {

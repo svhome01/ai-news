@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS category_settings (
     language                  TEXT    NOT NULL DEFAULT 'ja'
                                       CHECK (language IN ('ja', 'en')),    -- 要約・音声の言語
     tts_engine                TEXT    NOT NULL DEFAULT 'voicevox'
-                                      CHECK (tts_engine IN ('voicevox', 'edge-tts')), -- TTSエンジン選択
+                                      CHECK (tts_engine IN ('voicevox', 'edge-tts', 'gcloud')), -- TTSエンジン選択
     voicevox_speaker_id       INTEGER NOT NULL DEFAULT 3,        -- VOICEVOXのstyle_id (tts_engine='voicevox'時)
     tts_voice                 TEXT,                              -- edge-tts voice名 e.g. 'en-US-GuyNeural' (tts_engine='edge-tts'時)
     enabled                   INTEGER NOT NULL DEFAULT 1,        -- 0=スキップ, 1=パイプライン実行対象

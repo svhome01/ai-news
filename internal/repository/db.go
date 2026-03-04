@@ -35,21 +35,46 @@ func OpenDB(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// runMigrations executes the embedded SQL file statement by statement.
-// SQLite's database/sql driver does not support multi-statement Exec,
-// so we split on ";" and skip empty/comment-only lines.
+// runMigrations applies numbered migrations tracked by PRAGMA user_version.
+// Each migration runs only when the current version is below its target version.
 func runMigrations(db *sql.DB) error {
-	for _, stmt := range strings.Split(migrations.SQL, ";") {
+	var version int
+	_ = db.QueryRow("PRAGMA user_version").Scan(&version)
+
+	if version < 1 {
+		if err := execSQL(db, migrations.SQL1); err != nil {
+			return fmt.Errorf("migration 001: %w", err)
+		}
+		if _, err := db.Exec("PRAGMA user_version = 1"); err != nil {
+			return fmt.Errorf("set user_version 1: %w", err)
+		}
+	}
+
+	if version < 2 {
+		if err := execSQL(db, migrations.SQL2); err != nil {
+			return fmt.Errorf("migration 002: %w", err)
+		}
+		if _, err := db.Exec("PRAGMA user_version = 2"); err != nil {
+			return fmt.Errorf("set user_version 2: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// execSQL executes a multi-statement SQL string by splitting on ";" and
+// skipping empty or comment-only chunks.
+func execSQL(db *sql.DB, sql string) error {
+	for _, stmt := range strings.Split(sql, ";") {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			continue
 		}
-		// Skip leading comment blocks (lines starting with --)
 		if isAllComments(stmt) {
 			continue
 		}
 		if _, err := db.Exec(stmt); err != nil {
-			return fmt.Errorf("migration: %w\n  stmt: %.120s", err, stmt)
+			return fmt.Errorf("%w\n  stmt: %.120s", err, stmt)
 		}
 	}
 	return nil

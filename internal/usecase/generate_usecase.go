@@ -13,6 +13,7 @@ import (
 	"ai-news/internal/domain"
 	"ai-news/internal/infra/audio"
 	"ai-news/internal/infra/gemini"
+	gcloudtts "ai-news/internal/infra/gcloud_tts"
 	"ai-news/internal/infra/navidrome"
 	"ai-news/internal/infra/storage"
 	"ai-news/internal/infra/voicevox"
@@ -20,7 +21,8 @@ import (
 )
 
 // GenerateUsecase implements Stages 2–7 of the pipeline:
-// Gemini selection → VOICEVOX TTS → ffmpeg encode → SMB save → digest concat → Navidrome scan.
+// Gemini selection → TTS → ffmpeg encode → SMB save → digest concat → Navidrome scan.
+// Supports multiple TTS engines per category: voicevox, gcloud.
 type GenerateUsecase struct {
 	running atomic.Bool
 
@@ -33,13 +35,15 @@ type GenerateUsecase struct {
 	geminiAPIKey         string
 	maxGeminiConcurrency int
 
-	voicevoxClient *voicevox.Client
-	musicStore     *storage.MusicStore
-	naviClient     *navidrome.Client
-	appBaseURL     string
+	voicevoxClient  *voicevox.Client
+	gcloudTTSClient *gcloudtts.Client // nil when GCLOUD_TTS_KEY is not configured
+	musicStore      *storage.MusicStore
+	naviClient      *navidrome.Client
+	appBaseURL      string
 }
 
 // NewGenerateUsecase creates a GenerateUsecase.
+// gc may be nil when GCLOUD_TTS_KEY is not set; categories using gcloud will error.
 func NewGenerateUsecase(
 	pr *repository.PipelineRepo,
 	sr *repository.SettingsRepo,
@@ -49,6 +53,7 @@ func NewGenerateUsecase(
 	geminiAPIKey string,
 	maxGeminiConcurrency int,
 	vc *voicevox.Client,
+	gc *gcloudtts.Client,
 	ms *storage.MusicStore,
 	nc *navidrome.Client,
 	appBaseURL string,
@@ -62,6 +67,7 @@ func NewGenerateUsecase(
 		geminiAPIKey:         geminiAPIKey,
 		maxGeminiConcurrency: maxGeminiConcurrency,
 		voicevoxClient:       vc,
+		gcloudTTSClient:      gc,
 		musicStore:           ms,
 		naviClient:           nc,
 		appBaseURL:           appBaseURL,
@@ -114,12 +120,9 @@ func (uc *GenerateUsecase) runGenerate(ctx context.Context, runID int64) error {
 		return fmt.Errorf("list categories: %w", err)
 	}
 
-	// Count unprocessed articles for voicevox categories.
+	// Count unprocessed articles across all supported TTS engine categories.
 	totalUnprocessed := 0
 	for _, cat := range categories {
-		if cat.TTSEngine != "voicevox" {
-			continue
-		}
 		n, err := uc.articleRepo.CountUnprocessed(ctx, cat.Category)
 		if err != nil {
 			return fmt.Errorf("count unprocessed (%s): %w", cat.Category, err)
@@ -184,9 +187,6 @@ func (uc *GenerateUsecase) runGeminiSelection(
 	var wg sync.WaitGroup
 
 	for _, cat := range categories {
-		if cat.TTSEngine != "voicevox" {
-			continue
-		}
 		cat := cat
 		wg.Add(1)
 		sem <- struct{}{}
@@ -252,10 +252,6 @@ func (uc *GenerateUsecase) runEpisodes(
 ) (map[string]string, error) {
 	paths := make(map[string]string)
 	for _, cat := range categories {
-		if cat.TTSEngine != "voicevox" {
-			log.Printf("generate: category=%s TTSEngine=%s (unsupported), skipping", cat.Category, cat.TTSEngine)
-			continue
-		}
 		selected, err := uc.articleRepo.ListSelected(ctx, cat.Category)
 		if err != nil {
 			return nil, fmt.Errorf("list selected (%s): %w", cat.Category, err)
@@ -282,14 +278,33 @@ func (uc *GenerateUsecase) generateEpisode(
 	now := time.Now()
 	title := fmt.Sprintf("%s - %s %s", cat.DisplayName, now.Format("2006-01-02"), timePeriodJA(now.Hour()))
 
-	var wavSlices [][]byte
+	// synthesize is a closure that dispatches to the category's TTS engine.
+	synthesize := func(text string) ([]byte, error) {
+		switch cat.TTSEngine {
+		case "voicevox":
+			return uc.voicevoxClient.Synthesize(ctx, text, cat.VoicevoxSpeakerID, settings.VoicevoxSpeedScale)
+		case "gcloud":
+			if uc.gcloudTTSClient == nil {
+				return nil, fmt.Errorf("GCLOUD_TTS_KEY not configured")
+			}
+			voice := ""
+			if cat.TTSVoice != nil {
+				voice = *cat.TTSVoice
+			}
+			return uc.gcloudTTSClient.Synthesize(ctx, text, voice, settings.VoicevoxSpeedScale)
+		default:
+			return nil, fmt.Errorf("unsupported TTS engine: %s", cat.TTSEngine)
+		}
+	}
+
+	var audioSlices [][]byte
 
 	introText := fmt.Sprintf("こんにちは。AIニュースステーションです。%sのニュースをお届けします。", title)
-	introWAV, err := uc.voicevoxClient.Synthesize(ctx, introText, cat.VoicevoxSpeakerID, settings.VoicevoxSpeedScale)
+	introAudio, err := synthesize(introText)
 	if err != nil {
 		return "", fmt.Errorf("tts intro: %w", err)
 	}
-	wavSlices = append(wavSlices, introWAV)
+	audioSlices = append(audioSlices, introAudio)
 
 	var scriptParts []string
 	for _, a := range articles {
@@ -297,22 +312,27 @@ func (uc *GenerateUsecase) generateEpisode(
 		if a.Summary != nil && *a.Summary != "" {
 			text = *a.Summary
 		}
-		wav, err := uc.voicevoxClient.Synthesize(ctx, text, cat.VoicevoxSpeakerID, settings.VoicevoxSpeedScale)
+		articleAudio, err := synthesize(text)
 		if err != nil {
 			return "", fmt.Errorf("tts article %d: %w", a.ID, err)
 		}
-		wavSlices = append(wavSlices, wav)
+		audioSlices = append(audioSlices, articleAudio)
 		scriptParts = append(scriptParts, text)
 	}
 
-	outroWAV, err := uc.voicevoxClient.Synthesize(ctx, "以上、本日のニュースでした。またお聞きください。",
-		cat.VoicevoxSpeakerID, settings.VoicevoxSpeedScale)
+	outroAudio, err := synthesize("以上、本日のニュースでした。またお聞きください。")
 	if err != nil {
 		return "", fmt.Errorf("tts outro: %w", err)
 	}
-	wavSlices = append(wavSlices, outroWAV)
+	audioSlices = append(audioSlices, outroAudio)
 
-	encoded, err := audio.WAVsToMP3(ctx, wavSlices, title)
+	var encoded *audio.EncodedMP3
+	switch cat.TTSEngine {
+	case "gcloud":
+		encoded, err = audio.MP3sToMP3(ctx, audioSlices, title)
+	default: // voicevox
+		encoded, err = audio.WAVsToMP3(ctx, audioSlices, title)
+	}
 	if err != nil {
 		return "", fmt.Errorf("encode mp3: %w", err)
 	}

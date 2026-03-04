@@ -56,16 +56,19 @@
           <label>TTS エンジン
             <select name="tts_engine">
               <option value="voicevox">VOICEVOX</option>
-              <option value="edge-tts">edge-tts</option>
+              <option value="gcloud">Google Cloud TTS</option>
             </select>
           </label>
           <label>VOICEVOX スピーカーID
             <input type="number" name="voicevox_speaker_id" value="2" min="0">
           </label>
         </div>
+        <label>Google TTS Voice (gcloud 選択時: 例 ja-JP-Neural2-B)
+          <input type="text" name="tts_voice" placeholder="ja-JP-Neural2-B">
+        </label>
         <div class="grid">
           <label>記事数/回
-            <input type="number" name="articles_per_episode" value="5" min="1" max="20">
+            <input type="number" name="articles_per_episode" value="5" min="1" max="80">
           </label>
           <label>要約文字数
             <input type="number" name="summary_chars_per_article" value="200" min="50" max="500">
@@ -97,9 +100,50 @@
   <td>{{if .Enabled}}✅{{else}}❌{{end}}</td>
   <td>
     <button class="secondary outline" style="padding:0.3em 0.6em"
+      hx-get="/ui/settings/categories/{{.Category}}/edit"
+      hx-target="#cat-row-{{.Category}}"
+      hx-swap="outerHTML">編集</button>
+    <button class="secondary outline" style="padding:0.3em 0.6em"
       hx-delete="/ui/settings/categories/{{.Category}}"
       hx-target="#cat-row-{{.Category}}"
       hx-swap="outerHTML"
       hx-confirm="カテゴリ {{.Category}} を削除しますか？">削除</button>
+  </td>
+</tr>{{end}}
+
+{{define "category-edit-row"}}<tr id="cat-row-{{.Category}}">
+  <td colspan="5">
+    <form hx-put="/ui/settings/categories/{{.Category}}"
+          hx-target="#cat-row-{{.Category}}"
+          hx-swap="outerHTML">
+      <div class="grid">
+        <label>TTS エンジン
+          <select name="tts_engine">
+            <option value="voicevox" {{if eq .TTSEngine "voicevox"}}selected{{end}}>VOICEVOX</option>
+            <option value="gcloud"   {{if eq .TTSEngine "gcloud"}}selected{{end}}>Google Cloud TTS</option>
+          </select>
+        </label>
+        <label>VOICEVOX スピーカーID
+          <input type="number" name="voicevox_speaker_id" value="{{.VoicevoxSpeakerID}}" min="0">
+        </label>
+      </div>
+      <label>Google TTS Voice (gcloud 選択時: 例 ja-JP-Neural2-B)
+        <input type="text" name="tts_voice" value="{{derefStr .TTSVoice}}" placeholder="ja-JP-Neural2-B">
+      </label>
+      <div class="grid">
+        <label>記事数/回
+          <input type="number" name="articles_per_episode" value="{{.ArticlesPerEpisode}}" min="1" max="80">
+        </label>
+        <label>要約文字数
+          <input type="number" name="summary_chars_per_article" value="{{.SummaryCharsPerArticle}}" min="50" max="500">
+        </label>
+      </div>
+      <label><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> 有効</label>
+      <button type="submit">保存</button>
+      <button type="button" style="margin-left:0.5em"
+        hx-get="/ui/settings/categories/{{.Category}}"
+        hx-target="#cat-row-{{.Category}}"
+        hx-swap="outerHTML">キャンセル</button>
+    </form>
   </td>
 </tr>{{end}}

@@ -169,6 +169,69 @@ func WAVsToMP3(ctx context.Context, wavSlices [][]byte, title string) (*EncodedM
 	return &EncodedMP3{Data: data, DurationSec: durationSec}, nil
 }
 
+// MP3sToMP3 concatenates multiple MP3 byte slices into a single MP3 file,
+// attaches an ID3 title tag, and measures duration.
+// It mirrors WAVsToMP3 but accepts pre-encoded MP3 slices (e.g. from Cloud TTS).
+// The MP3 stream is copied without re-encoding (faster than WAVsToMP3).
+func MP3sToMP3(ctx context.Context, mp3Slices [][]byte, title string) (*EncodedMP3, error) {
+	if len(mp3Slices) == 0 {
+		return nil, fmt.Errorf("no mp3 slices provided")
+	}
+	tmpDir, err := os.MkdirTemp("", "ai-news-mp3s2mp3-*")
+	if err != nil {
+		return nil, fmt.Errorf("mktempdir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	var partPaths []string
+	for i, data := range mp3Slices {
+		p := filepath.Join(tmpDir, fmt.Sprintf("part%03d.mp3", i))
+		if err := os.WriteFile(p, data, 0600); err != nil {
+			return nil, fmt.Errorf("write mp3 part %d: %w", i, err)
+		}
+		partPaths = append(partPaths, p)
+	}
+
+	listPath := filepath.Join(tmpDir, "concat.txt")
+	var sb strings.Builder
+	for _, p := range partPaths {
+		sb.WriteString("file '")
+		sb.WriteString(p)
+		sb.WriteString("'\n")
+	}
+	if err := os.WriteFile(listPath, []byte(sb.String()), 0600); err != nil {
+		return nil, fmt.Errorf("write concat list: %w", err)
+	}
+
+	mp3Path := filepath.Join(tmpDir, "output.mp3")
+	cmd := exec.CommandContext(ctx,
+		"ffmpeg", "-y",
+		"-f", "concat",
+		"-safe", "0",
+		"-i", listPath,
+		"-c", "copy",
+		mp3Path,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg concat: %w\noutput: %s", err, out)
+	}
+
+	if err := addID3Tags(mp3Path, title); err != nil {
+		_ = err // non-fatal
+	}
+
+	durationSec, err := ffprobeDuration(ctx, mp3Path)
+	if err != nil {
+		durationSec = 0
+	}
+
+	data, err := os.ReadFile(mp3Path)
+	if err != nil {
+		return nil, fmt.Errorf("read mp3: %w", err)
+	}
+	return &EncodedMP3{Data: data, DurationSec: durationSec}, nil
+}
+
 // ConcatMP3 concatenates multiple MP3 files (given as byte slices, in order) into one.
 // The caller is responsible for creating and removing tmpDir.
 func ConcatMP3(ctx context.Context, mp3Slices [][]byte, tmpDir string) ([]byte, error) {

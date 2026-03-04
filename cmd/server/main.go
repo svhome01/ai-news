@@ -15,6 +15,7 @@ import (
 	"ai-news/internal/handler"
 	apih "ai-news/internal/handler/api"
 	webh "ai-news/internal/handler/web"
+	gcloudtts "ai-news/internal/infra/gcloud_tts"
 	"ai-news/internal/infra/navidrome"
 	"ai-news/internal/infra/scraper"
 	"ai-news/internal/infra/storage"
@@ -54,6 +55,11 @@ func main() {
 	voicevoxClient := voicevox.New(cfg.VOICEVOXUrl)
 	musicStore     := storage.New(cfg.SMBHost, cfg.SMBUser, cfg.SMBPass, cfg.SMBShare, cfg.SMBMusicPath)
 
+	var gcloudTTSClient *gcloudtts.Client
+	if cfg.GCloudTTSKey != "" {
+		gcloudTTSClient = gcloudtts.New(cfg.GCloudTTSKey)
+	}
+
 	var naviClient *navidrome.Client
 	if cfg.NavidromeURL != "" && cfg.NavidromeUser != "" {
 		naviClient = navidrome.New(cfg.NavidromeURL, cfg.NavidromeUser, cfg.NavidromePass)
@@ -71,7 +77,7 @@ func main() {
 	generateUC := usecase.NewGenerateUsecase(
 		pipelineRepo, settingsRepo, categoryRepo, articleRepo, broadcastRepo,
 		cfg.GeminiAPIKey, cfg.MaxGeminiConcurrency,
-		voicevoxClient, musicStore, naviClient,
+		voicevoxClient, gcloudTTSClient, musicStore, naviClient,
 		cfg.AppBaseURL,
 	)
 
@@ -94,7 +100,14 @@ func main() {
 
 	// ── Templates ───────────────────────────────────────────────────────────
 	tmplDir := "templates"
-	funcMap := template.FuncMap{}
+	funcMap := template.FuncMap{
+		"derefStr": func(s *string) string {
+			if s == nil {
+				return ""
+			}
+			return *s
+		},
+	}
 
 	parseFull := func(files ...string) *template.Template {
 		paths := make([]string, len(files))
@@ -151,6 +164,9 @@ func main() {
 	mux.HandleFunc("GET /ui/settings", settingsH.Page)
 	mux.HandleFunc("POST /ui/settings", settingsH.Update)
 	mux.HandleFunc("POST /ui/settings/categories", settingsH.CreateCategory)
+	mux.HandleFunc("GET /ui/settings/categories/{name}", settingsH.GetCategoryView)
+	mux.HandleFunc("GET /ui/settings/categories/{name}/edit", settingsH.GetCategoryEdit)
+	mux.HandleFunc("PUT /ui/settings/categories/{name}", settingsH.UpdateCategory)
 	mux.HandleFunc("DELETE /ui/settings/categories/{name}", settingsH.DeleteCategory)
 
 	mux.HandleFunc("GET /ui/system", systemH.Page)

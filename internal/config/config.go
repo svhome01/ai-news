@@ -25,6 +25,8 @@ type Config struct {
 	SMBMusicPath          string
 	AppBaseURL            string
 	TZ                    string
+	GCloudTTSKey          string
+	GCloudTTSVoice        string
 }
 
 // Load reads environment variables (and optionally .env) into a Config.
@@ -49,6 +51,8 @@ func Load() *Config {
 		SMBMusicPath:          getEnv("SMB_MUSIC_PATH", "ai-news"),
 		AppBaseURL:            getEnv("APP_BASE_URL", "http://192.168.0.13:8181"),
 		TZ:                    getEnv("TZ", "Asia/Tokyo"),
+		GCloudTTSKey:          getEnv("GCLOUD_TTS_KEY", ""),
+		GCloudTTSVoice:        getEnv("GCLOUD_TTS_VOICE", "ja-JP-Neural2-B"),
 	}
 }
 
