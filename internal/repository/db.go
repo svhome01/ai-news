@@ -51,8 +51,14 @@ func runMigrations(db *sql.DB) error {
 	}
 
 	if version < 2 {
-		if err := execSQL(db, migrations.SQL2); err != nil {
-			return fmt.Errorf("migration 002: %w", err)
+		// Temporarily disable FK enforcement to allow table rebuild (DROP + RENAME).
+		if _, err := db.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+			return fmt.Errorf("disable FK: %w", err)
+		}
+		migrErr := execSQL(db, migrations.SQL2)
+		db.Exec("PRAGMA foreign_keys = ON") // always re-enable
+		if migrErr != nil {
+			return fmt.Errorf("migration 002: %w", migrErr)
 		}
 		if _, err := db.Exec("PRAGMA user_version = 2"); err != nil {
 			return fmt.Errorf("set user_version 2: %w", err)
