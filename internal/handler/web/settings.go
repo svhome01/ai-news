@@ -64,12 +64,10 @@ func (h *SettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		renderError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	speed, _ := strconv.ParseFloat(r.FormValue("voicevox_speed_scale"), 64)
 	retDays, _ := strconv.Atoi(r.FormValue("retention_days"))
 	s := &domain.AppSettings{
-		VoicevoxSpeedScale: speed,
-		GeminiModel:        r.FormValue("gemini_model"),
-		RetentionDays:      retDays,
+		GeminiModel:   r.FormValue("gemini_model"),
+		RetentionDays: retDays,
 	}
 	if err := h.settingsUC.Update(r.Context(), s); err != nil {
 		renderError(w, http.StatusInternalServerError, err.Error())
@@ -88,6 +86,10 @@ func (h *SettingsHandler) CreateCategory(w http.ResponseWriter, r *http.Request)
 	artCount, _ := strconv.Atoi(r.FormValue("articles_per_episode"))
 	summChars, _ := strconv.Atoi(r.FormValue("summary_chars_per_article"))
 	sortOrder, _ := strconv.Atoi(r.FormValue("sort_order"))
+	speedScale, _ := strconv.ParseFloat(r.FormValue("speed_scale"), 64)
+	if speedScale <= 0 {
+		speedScale = 1.0
+	}
 	ttsVoice := r.FormValue("tts_voice")
 	var ttsVoicePtr *string
 	if ttsVoice != "" {
@@ -99,6 +101,7 @@ func (h *SettingsHandler) CreateCategory(w http.ResponseWriter, r *http.Request)
 		TTSEngine:              r.FormValue("tts_engine"),
 		VoicevoxSpeakerID:      speakerID,
 		TTSVoice:               ttsVoicePtr,
+		SpeedScale:             speedScale,
 		Language:               r.FormValue("language"),
 		ArticlesPerEpisode:     artCount,
 		SummaryCharsPerArticle: summChars,
@@ -156,6 +159,10 @@ func (h *SettingsHandler) UpdateCategory(w http.ResponseWriter, r *http.Request)
 	speakerID, _ := strconv.Atoi(r.FormValue("voicevox_speaker_id"))
 	artCount, _ := strconv.Atoi(r.FormValue("articles_per_episode"))
 	summChars, _ := strconv.Atoi(r.FormValue("summary_chars_per_article"))
+	speedScale, _ := strconv.ParseFloat(r.FormValue("speed_scale"), 64)
+	if speedScale <= 0 {
+		speedScale = 1.0
+	}
 	ttsVoice := r.FormValue("tts_voice")
 	var ttsVoicePtr *string
 	if ttsVoice != "" {
@@ -164,6 +171,7 @@ func (h *SettingsHandler) UpdateCategory(w http.ResponseWriter, r *http.Request)
 	c.TTSEngine = r.FormValue("tts_engine")
 	c.VoicevoxSpeakerID = speakerID
 	c.TTSVoice = ttsVoicePtr
+	c.SpeedScale = speedScale
 	c.ArticlesPerEpisode = artCount
 	c.SummaryCharsPerArticle = summChars
 	c.Enabled = r.FormValue("enabled") != ""

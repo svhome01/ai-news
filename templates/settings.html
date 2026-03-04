@@ -9,11 +9,7 @@
   <section>
     <h2>アプリ設定</h2>
     <form method="post" action="/ui/settings">
-      <label>VOICEVOX スピード (0.5–2.0)
-        <input type="number" name="voicevox_speed_scale"
-               value="{{.Settings.VoicevoxSpeedScale}}" min="0.5" max="2.0" step="0.1">
-      </label>
-      <label>Gemini モデル
+      <label>AI 要約・選定モデル
         <input type="text" name="gemini_model" value="{{.Settings.GeminiModel}}">
       </label>
       <label>保持期間 (日)
@@ -29,7 +25,7 @@
     <h2>カテゴリ設定</h2>
     <table>
       <thead>
-        <tr><th>カテゴリ</th><th>表示名</th><th>TTS</th><th>有効</th><th>操作</th></tr>
+        <tr><th>カテゴリ</th><th>表示名</th><th>TTS</th><th>速度</th><th>有効</th><th>操作</th></tr>
       </thead>
       <tbody id="category-tbody">
         {{range .Categories}}
@@ -67,24 +63,27 @@
           <input type="text" name="tts_voice" placeholder="ja-JP-Neural2-B">
         </label>
         <div class="grid">
+          <label>読み上げ速度 (0.25–4.0)
+            <input type="number" name="speed_scale" value="1.0" min="0.25" max="4.0" step="0.05">
+          </label>
           <label>記事数/回
             <input type="number" name="articles_per_episode" value="5" min="1" max="80">
           </label>
+        </div>
+        <div class="grid">
           <label>要約文字数
             <input type="number" name="summary_chars_per_article" value="200" min="50" max="500">
           </label>
-        </div>
-        <div class="grid">
           <label>言語
             <select name="language">
               <option value="ja">日本語</option>
               <option value="en">English</option>
             </select>
           </label>
-          <label>ソート順
-            <input type="number" name="sort_order" value="0">
-          </label>
         </div>
+        <label>ソート順
+          <input type="number" name="sort_order" value="0">
+        </label>
         <label><input type="checkbox" name="enabled" checked> 有効</label>
         <button type="submit">追加</button>
       </form>
@@ -97,6 +96,7 @@
   <td><code>{{.Category}}</code></td>
   <td>{{.DisplayName}}</td>
   <td>{{.TTSEngine}}</td>
+  <td>{{.SpeedScale}}</td>
   <td>{{if .Enabled}}✅{{else}}❌{{end}}</td>
   <td>
     <button class="secondary outline" style="padding:0.3em 0.6em"
@@ -112,7 +112,7 @@
 </tr>{{end}}
 
 {{define "category-edit-row"}}<tr id="cat-row-{{.Category}}">
-  <td colspan="5">
+  <td colspan="6">
     <form hx-put="/ui/settings/categories/{{.Category}}"
           hx-target="#cat-row-{{.Category}}"
           hx-swap="outerHTML">
@@ -131,13 +131,16 @@
         <input type="text" name="tts_voice" value="{{derefStr .TTSVoice}}" placeholder="ja-JP-Neural2-B">
       </label>
       <div class="grid">
+        <label>読み上げ速度 (0.25–4.0)
+          <input type="number" name="speed_scale" value="{{.SpeedScale}}" min="0.25" max="4.0" step="0.05">
+        </label>
         <label>記事数/回
           <input type="number" name="articles_per_episode" value="{{.ArticlesPerEpisode}}" min="1" max="80">
         </label>
-        <label>要約文字数
-          <input type="number" name="summary_chars_per_article" value="{{.SummaryCharsPerArticle}}" min="50" max="500">
-        </label>
       </div>
+      <label>要約文字数
+        <input type="number" name="summary_chars_per_article" value="{{.SummaryCharsPerArticle}}" min="50" max="500">
+      </label>
       <label><input type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}> 有効</label>
       <button type="submit">保存</button>
       <button type="button" style="margin-left:0.5em"

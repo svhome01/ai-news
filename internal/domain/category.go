@@ -14,10 +14,11 @@ type CategorySettings struct {
 	DisplayName            string
 	ArticlesPerEpisode     int
 	SummaryCharsPerArticle int
-	Language               string // "ja" or "en"
-	TTSEngine              string // "voicevox" or "edge-tts"
-	VoicevoxSpeakerID      int    // VOICEVOX style_id (used when TTSEngine == "voicevox")
-	TTSVoice               *string // edge-tts voice name (used when TTSEngine == "edge-tts")
+	Language               string  // "ja" or "en"
+	TTSEngine              string  // "voicevox", "edge-tts", or "gcloud"
+	VoicevoxSpeakerID      int     // VOICEVOX style_id (used when TTSEngine == "voicevox")
+	TTSVoice               *string // Cloud TTS / edge-tts voice name
+	SpeedScale             float64 // TTS speaking rate (0.25–4.0); default 1.0
 	Enabled                bool
 	SortOrder              int
 	CreatedAt              string

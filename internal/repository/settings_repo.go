@@ -17,9 +17,9 @@ func NewSettingsRepo(db *sql.DB) *SettingsRepo { return &SettingsRepo{db: db} }
 func (r *SettingsRepo) Get(ctx context.Context) (*domain.AppSettings, error) {
 	var s domain.AppSettings
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, voicevox_speed_scale, gemini_model, retention_days, updated_at
+		SELECT id, gemini_model, retention_days, updated_at
 		FROM app_settings WHERE id = 1`).Scan(
-		&s.ID, &s.VoicevoxSpeedScale, &s.GeminiModel, &s.RetentionDays, &s.UpdatedAt,
+		&s.ID, &s.GeminiModel, &s.RetentionDays, &s.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, domain.ErrNotFound
@@ -35,10 +35,10 @@ func (r *SettingsRepo) Get(ctx context.Context) (*domain.AppSettings, error) {
 func (r *SettingsRepo) Update(ctx context.Context, s *domain.AppSettings) error {
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE app_settings
-		SET voicevox_speed_scale = ?, gemini_model = ?, retention_days = ?,
+		SET gemini_model = ?, retention_days = ?,
 		    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 		WHERE id = 1`,
-		s.VoicevoxSpeedScale, s.GeminiModel, s.RetentionDays,
+		s.GeminiModel, s.RetentionDays,
 	)
 	return err
 }

@@ -18,10 +18,10 @@ func (r *CategoryRepo) Create(ctx context.Context, c *domain.CategorySettings) e
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO category_settings
 			(category, display_name, articles_per_episode, summary_chars_per_article,
-			 language, tts_engine, voicevox_speaker_id, tts_voice, enabled, sort_order)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 language, tts_engine, voicevox_speaker_id, tts_voice, speed_scale, enabled, sort_order)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.Category, c.DisplayName, c.ArticlesPerEpisode, c.SummaryCharsPerArticle,
-		c.Language, c.TTSEngine, c.VoicevoxSpeakerID, c.TTSVoice,
+		c.Language, c.TTSEngine, c.VoicevoxSpeakerID, c.TTSVoice, c.SpeedScale,
 		boolToInt(c.Enabled), c.SortOrder,
 	)
 	if err != nil {
@@ -34,7 +34,7 @@ func (r *CategoryRepo) Create(ctx context.Context, c *domain.CategorySettings) e
 func (r *CategoryRepo) GetByName(ctx context.Context, name string) (*domain.CategorySettings, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT category, display_name, articles_per_episode, summary_chars_per_article,
-		       language, tts_engine, voicevox_speaker_id, tts_voice, enabled, sort_order, created_at
+		       language, tts_engine, voicevox_speaker_id, tts_voice, speed_scale, enabled, sort_order, created_at
 		FROM category_settings WHERE category = ?`, name)
 	return scanCategory(row)
 }
@@ -43,7 +43,7 @@ func (r *CategoryRepo) GetByName(ctx context.Context, name string) (*domain.Cate
 func (r *CategoryRepo) List(ctx context.Context) ([]*domain.CategorySettings, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT category, display_name, articles_per_episode, summary_chars_per_article,
-		       language, tts_engine, voicevox_speaker_id, tts_voice, enabled, sort_order, created_at
+		       language, tts_engine, voicevox_speaker_id, tts_voice, speed_scale, enabled, sort_order, created_at
 		FROM category_settings ORDER BY sort_order, category`)
 	if err != nil {
 		return nil, fmt.Errorf("category list: %w", err)
@@ -56,7 +56,7 @@ func (r *CategoryRepo) List(ctx context.Context) ([]*domain.CategorySettings, er
 func (r *CategoryRepo) ListEnabled(ctx context.Context) ([]*domain.CategorySettings, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT category, display_name, articles_per_episode, summary_chars_per_article,
-		       language, tts_engine, voicevox_speaker_id, tts_voice, enabled, sort_order, created_at
+		       language, tts_engine, voicevox_speaker_id, tts_voice, speed_scale, enabled, sort_order, created_at
 		FROM category_settings WHERE enabled = 1 ORDER BY sort_order, category`)
 	if err != nil {
 		return nil, fmt.Errorf("category list enabled: %w", err)
@@ -71,11 +71,11 @@ func (r *CategoryRepo) Update(ctx context.Context, c *domain.CategorySettings) e
 		UPDATE category_settings
 		SET display_name = ?, articles_per_episode = ?, summary_chars_per_article = ?,
 		    language = ?, tts_engine = ?, voicevox_speaker_id = ?, tts_voice = ?,
-		    enabled = ?, sort_order = ?
+		    speed_scale = ?, enabled = ?, sort_order = ?
 		WHERE category = ?`,
 		c.DisplayName, c.ArticlesPerEpisode, c.SummaryCharsPerArticle,
 		c.Language, c.TTSEngine, c.VoicevoxSpeakerID, c.TTSVoice,
-		boolToInt(c.Enabled), c.SortOrder, c.Category,
+		c.SpeedScale, boolToInt(c.Enabled), c.SortOrder, c.Category,
 	)
 	return err
 }
@@ -94,7 +94,7 @@ func scanCategory(row *sql.Row) (*domain.CategorySettings, error) {
 	err := row.Scan(
 		&c.Category, &c.DisplayName, &c.ArticlesPerEpisode, &c.SummaryCharsPerArticle,
 		&c.Language, &c.TTSEngine, &c.VoicevoxSpeakerID, &c.TTSVoice,
-		&enabledInt, &c.SortOrder, &c.CreatedAt,
+		&c.SpeedScale, &enabledInt, &c.SortOrder, &c.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, domain.ErrNotFound
@@ -114,7 +114,7 @@ func scanCategories(rows *sql.Rows) ([]*domain.CategorySettings, error) {
 		if err := rows.Scan(
 			&c.Category, &c.DisplayName, &c.ArticlesPerEpisode, &c.SummaryCharsPerArticle,
 			&c.Language, &c.TTSEngine, &c.VoicevoxSpeakerID, &c.TTSVoice,
-			&enabledInt, &c.SortOrder, &c.CreatedAt,
+			&c.SpeedScale, &enabledInt, &c.SortOrder, &c.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan category row: %w", err)
 		}

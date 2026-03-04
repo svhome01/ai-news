@@ -149,7 +149,7 @@ func (uc *GenerateUsecase) runGenerate(ctx context.Context, runID int64) error {
 
 	// Stages 3–5: TTS + encode + save per category (sort_order).
 	_ = uc.pipelineRepo.UpdateStep(ctx, runID, "tts_encode_save")
-	episodePaths, err := uc.runEpisodes(ctx, runID, categories, settings)
+	episodePaths, err := uc.runEpisodes(ctx, runID, categories)
 	if err != nil {
 		return err
 	}
@@ -248,7 +248,6 @@ func (uc *GenerateUsecase) runEpisodes(
 	ctx context.Context,
 	runID int64,
 	categories []*domain.CategorySettings,
-	settings *domain.AppSettings,
 ) (map[string]string, error) {
 	paths := make(map[string]string)
 	for _, cat := range categories {
@@ -259,7 +258,7 @@ func (uc *GenerateUsecase) runEpisodes(
 		if len(selected) == 0 {
 			continue
 		}
-		fp, err := uc.generateEpisode(ctx, runID, cat, selected, settings)
+		fp, err := uc.generateEpisode(ctx, runID, cat, selected)
 		if err != nil {
 			return nil, fmt.Errorf("episode (%s): %w", cat.Category, err)
 		}
@@ -273,7 +272,6 @@ func (uc *GenerateUsecase) generateEpisode(
 	runID int64,
 	cat *domain.CategorySettings,
 	articles []*domain.Article,
-	settings *domain.AppSettings,
 ) (string, error) {
 	now := time.Now()
 	title := fmt.Sprintf("%s - %s %s", cat.DisplayName, now.Format("2006-01-02"), timePeriodJA(now.Hour()))
@@ -282,7 +280,7 @@ func (uc *GenerateUsecase) generateEpisode(
 	synthesize := func(text string) ([]byte, error) {
 		switch cat.TTSEngine {
 		case "voicevox":
-			return uc.voicevoxClient.Synthesize(ctx, text, cat.VoicevoxSpeakerID, settings.VoicevoxSpeedScale)
+			return uc.voicevoxClient.Synthesize(ctx, text, cat.VoicevoxSpeakerID, cat.SpeedScale)
 		case "gcloud":
 			if uc.gcloudTTSClient == nil {
 				return nil, fmt.Errorf("GCLOUD_TTS_KEY not configured")
@@ -291,7 +289,7 @@ func (uc *GenerateUsecase) generateEpisode(
 			if cat.TTSVoice != nil {
 				voice = *cat.TTSVoice
 			}
-			return uc.gcloudTTSClient.Synthesize(ctx, text, voice, settings.VoicevoxSpeedScale)
+			return uc.gcloudTTSClient.Synthesize(ctx, text, voice, cat.SpeedScale)
 		default:
 			return nil, fmt.Errorf("unsupported TTS engine: %s", cat.TTSEngine)
 		}

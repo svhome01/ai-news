@@ -65,6 +65,15 @@ func runMigrations(db *sql.DB) error {
 		}
 	}
 
+	if version < 3 {
+		if err := execSQL(db, migrations.SQL3); err != nil {
+			return fmt.Errorf("migration 003: %w", err)
+		}
+		if _, err := db.Exec("PRAGMA user_version = 3"); err != nil {
+			return fmt.Errorf("set user_version 3: %w", err)
+		}
+	}
+
 	return nil
 }
 
