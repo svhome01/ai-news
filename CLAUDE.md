@@ -81,8 +81,8 @@ docker-lxc /opt/stacks/   ← bind mount (HOST SSD → LXC 103)
 | HTMLパース | `github.com/PuerkitoBio/goquery` |
 | JSレンダリング | `github.com/playwright-community/playwright-go` (ConnectOverCDP) |
 | AI | `google.golang.org/genai` (Gemini API) |
-| TTS | VOICEVOX REST API / edge-tts (将来) |
-| MP3処理 | ffmpeg (WAV→MP3変換, concat) + ffprobe (duration取得) |
+| TTS | VOICEVOX REST API / Google Cloud TTS (Neural2/Chirp3 HD) / カテゴリ別エンジン選択 |
+| MP3処理 | ffmpeg (WAV/MP3→MP3変換, concat) + ffprobe (duration取得) |
 | ID3タグ | `github.com/bogem/id3v2/v2` |
 | 環境変数 | `github.com/joho/godotenv` |
 
@@ -101,7 +101,7 @@ ai-news/
 │   │   ├── pipeline.go
 │   │   └── errors.go
 │   ├── repository/                 # SQLiteアクセス層
-│   │   ├── db.go                   # DB open/close, WAL, スキーママイグレーション
+│   │   ├── db.go                   # DB open/close, WAL, スキーママイグレーション (PRAGMA user_version)
 │   │   ├── article_repo.go
 │   │   ├── source_repo.go
 │   │   ├── broadcast_repo.go
@@ -121,6 +121,7 @@ ai-news/
 │   │   ├── scraper/                # RSS / HTTP / Playwright
 │   │   ├── gemini/                 # Gemini API
 │   │   ├── voicevox/               # VOICEVOX REST
+│   │   ├── gcloud_tts/             # Google Cloud TTS REST クライアント
 │   │   ├── audio/                  # ffmpeg変換
 │   │   ├── storage/                # go-smb2 SMBクライアント
 │   │   └── navidrome/              # Subsonic API
@@ -130,7 +131,11 @@ ai-news/
 │   │   └── api/                    # REST APIハンドラー (JSON)
 │   ├── scheduler/scheduler.go      # robfig/cron v3
 │   └── config/config.go            # 環境変数読み込み
-├── migrations/001_initial.sql      # DDL全量 (//go:embedでバイナリ埋め込み)
+├── migrations/
+│   ├── 001_initial.sql             # 初期スキーマ
+│   ├── 002_gcloud_tts.sql          # tts_engine CHECK制約に 'gcloud' 追加
+│   ├── 003_per_category_speed.sql  # category_settings.speed_scale 追加
+│   └── embed.go                    # //go:embed で3ファイルをバイナリ埋め込み
 ├── templates/                      # html/templateファイル
 ├── Dockerfile                      # マルチステージビルド (Go + debian:bookworm-slim)
 ├── entrypoint.sh                   # 起動時 /data chown → アプリ起動
@@ -149,9 +154,11 @@ ai-news/
 
 ```
 GenerateUsecase
-  → Gemini API (記事選定・要約)
-  → VOICEVOX (audio_query → synthesis → WAV)
-  → ffmpeg (WAV → MP3 + ID3タグ)
+  → Gemini API (記事選定・要約; AI 要約・選定モデル設定)
+  → TTS エンジン (カテゴリ別 cat.TTSEngine で切り替え):
+      voicevox: VOICEVOX (audio_query → synthesis → WAV)
+      gcloud:   Google Cloud TTS (HTTP REST → MP3, base64デコード)
+  → ffmpeg (WAV/MP3 → MP3 + ID3タグ; cat.SpeedScale を speakingRate に適用)
   → go-smb2 → //192.168.0.22/Music/ai-news/{category}/ にMP3保存
   → broadcastsテーブルに記録
   → Navidrome Subsonic API startScan
@@ -238,6 +245,8 @@ DB_PATH=/data/news.db
 PORT=8181
 MAX_GEMINI_CONCURRENCY=2
 TZ=Asia/Tokyo
+GCLOUD_TTS_KEY=...            # Google Cloud TTS APIキー (省略可: VOICEVOX専用時)
+GCLOUD_TTS_VOICE=ja-JP-Neural2-B  # デフォルト音声 (カテゴリ設定の tts_voice で上書き可)
 ```
 
 ---
@@ -249,3 +258,9 @@ TZ=Asia/Tokyo
 - コマンドは**冪等性（idempotency）**を保持する設計
 - `updated_at` カラムはSQLiteにON UPDATEトリガーがないため、`Update()`メソッド内で `strftime('%Y-%m-%dT%H:%M:%SZ','now')` を明示セット
 - 予約語カテゴリ `"stop"` / `"digest"` は `category_usecase.go` の `CreateCategory()` でバリデーション拒否（400エラー）
+- DB マイグレーション: `PRAGMA user_version` でバージョン管理 (現在 v3)
+  - v1: 初期スキーマ, v2: gcloud tts_engine追加, v3: per-category speed_scale追加
+  - migration 002 は FK制約の関係で `PRAGMA foreign_keys = OFF/ON` でラップ
+- `CategorySettings.SpeedScale float64` — TTS読み上げ速度 (0.25–4.0); デフォルト 1.0; VOICEVOX・Google Cloud TTS 両対応
+- `AppSettings` に `VoicevoxSpeedScale` なし (v3 で除去; DBカラム `voicevox_speed_scale` は残置)
+- `docker-compose.yml` の `environment:` に明示した変数のみコンテナに注入される。新規環境変数追加時は `.env` と `environment:` 両方への追記が必要

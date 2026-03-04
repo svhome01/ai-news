@@ -332,7 +332,10 @@ ai-news/
 │       └── config.go                 # 環境変数読み込み（godotenv）
 │
 ├── migrations/
-│   └── 001_initial.sql               # CREATE TABLE 全DDL（//go:embed でバイナリに同梱）
+│   ├── 001_initial.sql               # CREATE TABLE 全DDL（//go:embed でバイナリに同梱）
+│   ├── 002_gcloud_tts.sql            # tts_engine CHECK に 'gcloud' 追加（FK OFF/ON でラップ）
+│   ├── 003_per_category_speed.sql    # category_settings.speed_scale REAL DEFAULT 1.0 追加
+│   └── embed.go                      # //go:embed 3ファイルをバイナリに同梱
 │
 ├── templates/
 │   ├── layout.html                   # ベースレイアウト（Pico.css CDN + HTMX CDN）
@@ -441,8 +444,8 @@ flowchart LR
 erDiagram
     app_settings {
         INTEGER id PK "CHECK id=1 常に1行"
-        REAL voicevox_speed_scale "話速 0.5-2.0"
-        TEXT gemini_model "例 gemini-2.0-flash"
+        REAL voicevox_speed_scale "廃止済・DBカラムは残置"
+        TEXT gemini_model "AI要約・選定モデル名"
         INTEGER retention_days "保持日数 default 7"
         TEXT updated_at "Update で明示セット必須"
     }
@@ -459,11 +462,12 @@ erDiagram
         TEXT category PK "予約語 stop digest 禁止"
         TEXT display_name
         INTEGER articles_per_episode "default 10"
-        INTEGER summary_chars_per_article "default 200"
+        INTEGER summary_chars_per_article "1記事あたり default 200"
         TEXT language "ja or en"
-        TEXT tts_engine "voicevox or edge-tts"
+        TEXT tts_engine "voicevox or gcloud"
         INTEGER voicevox_speaker_id "style_id"
-        TEXT tts_voice "edge-tts voice名"
+        TEXT tts_voice "gcloud voice名 e.g. ja-JP-Neural2-B"
+        REAL speed_scale "読み上げ速度 0.25-4.0 default 1.0"
         INTEGER enabled "0=スキップ 1=対象"
         INTEGER sort_order "UI表示 digest連結順"
         TEXT created_at
@@ -540,8 +544,8 @@ PRAGMA foreign_keys = ON;
 -- CHECK (id = 1) で複数行挿入を禁止。INSERTはOR IGNOREで冪等性を保証
 CREATE TABLE IF NOT EXISTS app_settings (
     id                   INTEGER PRIMARY KEY CHECK (id = 1),
-    voicevox_speed_scale REAL    NOT NULL DEFAULT 1.0,              -- 話速 (0.5〜2.0)
-    gemini_model         TEXT    NOT NULL DEFAULT 'gemini-2.0-flash', -- Gemini APIモデル名
+    voicevox_speed_scale REAL    NOT NULL DEFAULT 1.0,              -- ⚠ 廃止済カラム（v3でper-category化、DBカラムは残置）
+    gemini_model         TEXT    NOT NULL DEFAULT 'gemini-2.0-flash', -- AI要約・選定モデル名
     retention_days       INTEGER NOT NULL DEFAULT 7,                -- 記事・MP3・DBの保持日数
     updated_at           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     -- スケジュール設定は schedules テーブルで管理（追加・削除が自由な独立テーブル）
@@ -591,9 +595,10 @@ CREATE TABLE IF NOT EXISTS category_settings (
     language                  TEXT    NOT NULL DEFAULT 'ja'
                                       CHECK (language IN ('ja', 'en')),    -- 要約・音声の言語
     tts_engine                TEXT    NOT NULL DEFAULT 'voicevox'
-                                      CHECK (tts_engine IN ('voicevox', 'edge-tts')), -- TTSエンジン選択
+                                      CHECK (tts_engine IN ('voicevox', 'gcloud')), -- TTSエンジン選択 (migration 002で'gcloud'追加)
     voicevox_speaker_id       INTEGER NOT NULL DEFAULT 3,        -- VOICEVOXのstyle_id (tts_engine='voicevox'時)
-    tts_voice                 TEXT,                              -- edge-tts voice名 e.g. 'en-US-GuyNeural' (tts_engine='edge-tts'時)
+    tts_voice                 TEXT,                              -- Google Cloud TTS voice名 e.g. 'ja-JP-Neural2-B' (tts_engine='gcloud'時)
+    speed_scale               REAL    NOT NULL DEFAULT 1.0,      -- 読み上げ速度 0.25–4.0 (migration 003で追加; VOICEVOX・gcloud両対応)
     enabled                   INTEGER NOT NULL DEFAULT 1,        -- 0=スキップ, 1=パイプライン実行対象
     sort_order                INTEGER NOT NULL DEFAULT 0,        -- UI表示順・digest連結順
     created_at                TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
@@ -601,7 +606,7 @@ CREATE TABLE IF NOT EXISTS category_settings (
 CREATE INDEX IF NOT EXISTS idx_category_settings_enabled    ON category_settings (enabled);
 CREATE INDEX IF NOT EXISTS idx_category_settings_sort_order ON category_settings (sort_order);
 -- 初期カテゴリ: tech (ずんだもん ノーマル, style_id=3) / business (四国めたん ノーマル, style_id=2)
--- 英語カテゴリは後で追加: INSERT INTO category_settings (...) VALUES ('tech_en', ..., 'en', 'edge-tts', 3, 'en-US-GuyNeural', 1, 3)
+-- gcloud カテゴリ例: INSERT INTO category_settings (...) VALUES ('tech', ..., 'ja', 'gcloud', 3, 'ja-JP-Neural2-B', 1.0, 1, 1)
 INSERT OR IGNORE INTO category_settings
     (category, display_name, language, tts_engine, voicevox_speaker_id, sort_order) VALUES
     ('tech',     'テックニュース',     'ja', 'voicevox', 3, 1),
