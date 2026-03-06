@@ -380,7 +380,7 @@ curl -sf https://news.futamura.dev/healthz
 
 ## 9. Home Assistant スクリプト設定
 
-**前提:** `media_player.svhome02_audio` エンティティが HA に存在すること（後述）。
+**前提:** `media_player.music_player_daemon` エンティティが HA に存在すること（Section 9-4 参照）。
 
 ### 9-1. scripts.yaml への追記
 
@@ -392,7 +392,7 @@ play_tech_news:
   sequence:
   - action: media_player.play_media
     target:
-      entity_id: media_player.svhome02_audio
+      entity_id: media_player.music_player_daemon
     data:
       media_content_id: http://192.168.0.13:8181/media/tech/latest
       media_content_type: music
@@ -404,7 +404,7 @@ play_business_news:
   sequence:
   - action: media_player.play_media
     target:
-      entity_id: media_player.svhome02_audio
+      entity_id: media_player.music_player_daemon
     data:
       media_content_id: http://192.168.0.13:8181/media/business/latest
       media_content_type: music
@@ -416,7 +416,7 @@ stop_news_playback:
   sequence:
   - action: media_player.media_stop
     target:
-      entity_id: media_player.svhome02_audio
+      entity_id: media_player.music_player_daemon
   mode: single
   icon: mdi:stop
 ```
@@ -445,15 +445,11 @@ ssh -p 22 root@192.168.0.21 \
 # → script.stop_news_playback
 ```
 
-### 9-4. media_player.svhome02_audio の作成（未設定の場合）
+### 9-4. media_player.music_player_daemon について
 
-`media_player.svhome02_audio` エンティティは別途設定が必要。選択肢:
+`media_player.music_player_daemon` は svhome02 上の MPD (Music Player Daemon) を HA が制御するエンティティ。
 
-| 方法 | 概要 |
-|---|---|
-| USB オーディオパススルー | svhome02 に USB オーディオデバイス接続 → Proxmox UI で VM 201 に USB デバイス追加 → HA が自動検出 |
-| MPD Integration | svhome02 上で MPD を起動 → HA [Music Player Daemon integration](https://www.home-assistant.io/integrations/mpd/) を追加 |
-| 既存メディアプレイヤー | scripts.yaml の `entity_id` を `media_player.work_room_nest_mini` など既存エンティティに変更 |
+MPD のインストール・ALSA 設定・HA Integration 追加の手順は **SETUP_SERVER2.md Phase 10** を参照。
 
 ---
 

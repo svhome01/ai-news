@@ -19,7 +19,7 @@
 ```
 [svhome01 192.168.0.10]                    [svhome02 192.168.0.20]
  └── LXC 103 Docker (192.168.0.13)          ├── VM 201 HAOS (192.168.0.21)
-      ├── ai-news         :8181 ★            │    └── media_player.svhome02_audio
+      ├── ai-news         :8181 ★            │    └── media_player.music_player_daemon (MPD)
       ├── VOICEVOX        :50021             ├── LXC 202 Samba (192.168.0.22)
       ├── playwright-chrome ws:3000 (内部)   │    └── //Music (MP3保存先)
       └── Scrutiny Hub    :8080 (既存)       └── LXC 203 Navidrome (192.168.0.23:4533)
@@ -183,24 +183,64 @@ HA → POST /api/play/{category}
 ### HA設定例
 
 ```yaml
-# HA script 設定例（新設計）
-# ai-news の /media/{category}/latest を直接 media_content_id に指定して再生
+# HA script 設定例（実際の scripts.yaml より）
+# media_player.music_player_daemon = svhome02 HOST の MPD (port 6600)
+# ALSA: hw:0,0 (HDA Intel PCH) → svhome02 オーディオ端子
 script:
   play_tech_news:
     sequence:
       - action: media_player.play_media
         target:
-          entity_id: media_player.svhome02_audio
+          entity_id: media_player.music_player_daemon
         data:
           media_content_id: "http://192.168.0.13:8181/media/tech/latest"
+          media_content_type: music
+
+  play_business_news:
+    sequence:
+      - action: media_player.play_media
+        target:
+          entity_id: media_player.music_player_daemon
+        data:
+          media_content_id: "http://192.168.0.13:8181/media/business/latest"
           media_content_type: music
 
   stop_news_playback:
     sequence:
       - action: media_player.media_stop
         target:
-          entity_id: media_player.svhome02_audio
+          entity_id: media_player.music_player_daemon
 ```
+
+### ATOM ECHO 音声アシスタント構成
+
+```
+M5Stack ATOM ECHO (ESPHome)
+  → wake word "Okay Nabu" (openWakeWord, Wyoming port 10400)
+  → STT: faster-whisper base-int8 (Wyoming port 10300, temperature=0.0パッチ適用)
+  → Gemini Home pipeline (conversation.google_ai_conversation)
+      システムプロンプト: AIニュース再生セクション記載 (core.config_entries)
+      "テックニュース" → script.play_tech_news 呼び出し
+  → TTS: Google Translate ja (tts.google_translate_ja_com)
+  → ATOM ECHO スピーカーで応答音声再生
+
+script.play_tech_news
+  → media_player.music_player_daemon (MPD on svhome02 HOST, port 6600)
+  → http://192.168.0.13:8181/media/tech/latest (ai-news ストリーム)
+  → ALSA hw:0,0 (HDA Intel PCH) → svhome02 オーディオ端子
+```
+
+**重要な設定・既知の注意点:**
+- Whisper `temperature=0.0` パッチ: アドオン再起動で消える → `bash /share/patch_whisper.sh` で再適用
+  (svhome02-haos-vm 上の `/share/patch_whisper.sh`)
+- ESPHome `on_end`: `voice_assistant.stop` + `delay(500ms)` + `voice_assistant.start_continuous`
+  これがないと応答後に wake word をスキップして STT ループが発生する
+- svhome02 ALSA: `amixer sset Master unmute` + `alsactl store` で永続化済み
+- `google_ai_stt` は ESPHome と構造的に非互換 (Wyoming streaming 不対応) → 使用禁止
+
+**ESPHome YAML:** `/Users/kojirof/Mounts/homeassistant/esphome/work-room-atom-echo.yaml`
+**HA pipeline:** `.storage/assist_pipeline.pipelines` の "Gemini Home" エントリ
+**Gemini prompt:** `.storage/core.config_entries` の `subentry_id: 01KJ6MWFKDNDQN9N46WGX19WGD`
 
 ### Cloudflare Tunnel設定（LXC 101）
 
