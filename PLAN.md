@@ -791,7 +791,7 @@ script:
     sequence:
       - action: media_player.play_media
         target:
-          entity_id: media_player.svhome02_audio
+          entity_id: media_player.music_player_daemon
         data:
           media_content_id: "http://192.168.0.13:8181/media/tech/latest"
           media_content_type: music
@@ -800,7 +800,7 @@ script:
     sequence:
       - action: media_player.play_media
         target:
-          entity_id: media_player.svhome02_audio
+          entity_id: media_player.music_player_daemon
         data:
           media_content_id: "http://192.168.0.13:8181/media/business/latest"
           media_content_type: music
@@ -809,7 +809,7 @@ script:
     sequence:
       - action: media_player.media_stop
         target:
-          entity_id: media_player.svhome02_audio
+          entity_id: media_player.music_player_daemon
 
 # ※ /api/play/{category} は broadcast タイトル・duration などのメタ情報取得に利用可能
 #   HA の rest_command でレスポンスを取得し、通知等に活用できる
@@ -1125,7 +1125,7 @@ sequenceDiagram
     SMB-->>GoApp: バイトストリーム
     GoApp-->>HA: HTTP 200 Content-Type audio/mpeg
 
-    HA->>SPK: media_player.play svhome02_audio
+    HA->>SPK: media_player.play music_player_daemon
     activate SPK
     SPK-->>Trigger: 音声出力
     deactivate SPK
@@ -1388,7 +1388,7 @@ ingress:
 |---|---|---|---|
 | LXC 101 (Cloudflare Tunnel + DNS) | `ssh svhome01` → `pct enter 101` | `config.yml` に `news.futamura.dev → :8181` エントリ追加・`systemctl restart cloudflared`・CloudflareダッシュボードでCNAMEレコード追加 | `scrutiny.futamura.dev → :8080` の既存エントリを絶対に消さない。Access Applicationの新規作成不要（既存 `*.futamura.dev` ワイルドカードポリシーで自動適用） |
 | LXC 103 (Docker) | `ssh svhome01-docker` | `/opt/stacks/ai-news/` にgit clone・`.env`（SMB_HOST/SMB_USER/SMB_PASS等）設定・`docker compose up -d --build` | ポート **8181** を使用。HOST/LXCのシステム変更不要（SMB書き込み・読み出しはgo-smb2が直接担当） |
-| Home Assistant (svhome02) | ブラウザ: http://192.168.0.21:8123 | `scripts.yaml` に `media_player.play_media` (media_content_id: `http://192.168.0.13:8181/media/{category}/latest`) を設定・オートメーション設定 | ai-news への `HA_TOKEN` 不要。`media_player.svhome02_audio` のエンティティ名を確認して設定 |
+| Home Assistant (svhome02) | ブラウザ: http://192.168.0.21:8123 | `scripts.yaml` に `media_player.play_media` (media_content_id: `http://192.168.0.13:8181/media/{category}/latest`) を設定・オートメーション設定 | ai-news への `HA_TOKEN` 不要。`media_player.music_player_daemon` のエンティティ名を確認して設定 |
 | Navidrome (svhome02) | 設定変更不要 | ai-news フォルダを音楽ライブラリとして自動認識 | `//192.168.0.22/Music/ai-news/` に保存→Navidrome自動検出 |
 
 ---
