@@ -1,3 +1,9 @@
+# 全サービスの security_opt について:
+#   docker 29.7.2 は docker-default プロファイルの読込失敗をコンテナ作成の致命エラーとして扱う。
+#   Proxmox LXC 103 では apparmor_parser がプロファイルを replace できず、
+#   apparmor:unconfined を明示しないと起動できない。
+#   no-new-privileges は本スタック外の portainer / scrutiny / appdaemon-selenium と揃える。
+
 services:
   ai-news:
     build:
@@ -28,6 +34,9 @@ services:
     volumes:
       - /opt/stacks/ai-news/data:/data   # SQLite DB + thumbnails (HOST SSD bind mount)
     restart: unless-stopped
+    security_opt:
+      - apparmor:unconfined
+      - no-new-privileges:true
     depends_on:
       voicevox:
         condition: service_started   # AppArmor exec制限によりhealthcheckが使用不可 → Phase 2で解決
@@ -40,6 +49,9 @@ services:
     ports:
       - "50021:50021"
     restart: unless-stopped
+    security_opt:
+      - apparmor:unconfined
+      - no-new-privileges:true
     # healthcheck は AppArmor exec制限により Proxmox LXC 103 環境で動作不可
     # Phase 2以降で docker exec 不要な方式（外部HTTP確認）へ移行予定
     healthcheck:
@@ -52,6 +64,9 @@ services:
       - TIMEOUT=30000          # ページ取得タイムアウト (ms)
       - MAX_CONCURRENT_SESSIONS=2
     restart: unless-stopped
+    security_opt:
+      - apparmor:unconfined
+      - no-new-privileges:true
     # ポート非公開: ai-news コンテナから ws://playwright-chrome:3000 でのみアクセス
 
 # 名前付きボリュームなし
